@@ -7,22 +7,25 @@ import { WakeLockServiceImpl } from "./services/wakeLockService";
 import { PhoneUI, setPhoneState } from "./phone/phoneUI";
 
 async function bootstrap(): Promise<void> {
-  setPhoneState("connecting", "Connecting to glasses...", "Open this page from Even App dev mode");
+  setPhoneState("connecting", "Starting...");
 
   // --- Gmail OAuth: handle redirect before anything else ---
   const auth = new GmailAuthService();
-  const wasOAuthRedirect = await auth.handleRedirectIfPresent();
+  let wasOAuthRedirect = false;
+  try {
+    wasOAuthRedirect = await auth.handleRedirectIfPresent();
+  } catch (err: unknown) {
+    console.error("[main] OAuth redirect handling failed:", err);
+    setPhoneState("error", `Sign-in failed: ${String(err)}`);
+    // Continue — still create PhoneUI so user can retry
+  }
 
   const glass = new GlassAdapterImpl();
   const gmail = new GmailAdapterImpl(auth);
   const wakeLock = new WakeLockServiceImpl();
   const controller = new Controller({ glass, gmail, auth, wakeLock });
 
-  // Start controller (connects bridge, checks auth, loads labels)
-  await controller.start();
-  setPhoneState("connected", "Connected");
-
-  // --- Initialize phone UI ---
+  // --- Initialize phone UI immediately ---
   const phoneUI = new PhoneUI({
     onSignIn: async () => {
       await auth.startAuth();
@@ -33,28 +36,44 @@ async function bootstrap(): Promise<void> {
       window.location.reload();
     },
     onLabelSelect: (label) => {
-      // Label selection from phone just shows it on the glasses
       console.log("[main] Phone selected label:", label.name);
     },
     isAuthenticated: () => auth.isAuthenticated(),
     getEmail: async () => gmail.getProfile(),
   });
 
-  // If we just came back from OAuth, refresh the controller and show authenticated state
+  // If authenticated, show labels on phone immediately
   if (wasOAuthRedirect || auth.isAuthenticated()) {
     try {
-      if (wasOAuthRedirect) {
-        console.log("[main] Returned from Google OAuth redirect");
-        await controller.refreshAfterAuth();
-      }
-
       const labels = await gmail.listLabels();
       await phoneUI.showAuthenticated(labels);
+      setPhoneState("connected", "Signed in — connecting glasses...");
     } catch (err: unknown) {
       console.error("[main] Post-auth setup failed:", err);
-      setPhoneState("error", "Failed to load Gmail", String(err));
+      setPhoneState("error", `Failed to load Gmail: ${String(err)}`);
+      return;
     }
   }
+
+  // Connect glasses in background — don't block the phone UI
+  controller.start()
+    .then(async () => {
+      setPhoneState("connected", "Connected");
+      if (auth.isAuthenticated()) {
+        try {
+          await controller.refreshAfterAuth();
+        } catch (err: unknown) {
+          console.error("[main] Post-auth glasses refresh failed:", err);
+        }
+      }
+    })
+    .catch((err: unknown) => {
+      console.error("[main] Glass bridge failed:", err);
+      setPhoneState(
+        auth.isAuthenticated() ? "connected" : "error",
+        auth.isAuthenticated() ? "Signed in — glasses offline" : "Glasses not connected",
+      );
+    });
 }
 
 void bootstrap().catch((error: unknown) => {

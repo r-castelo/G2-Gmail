@@ -95,29 +95,29 @@ export class GmailAuthService {
 
     if (!code) return false;
 
+    // From here on, we HAVE an OAuth callback — failures should throw,
+    // not silently return false, so the UI can show what went wrong.
+
     // Verify CSRF state
     const savedState = localStorage.getItem(STORAGE_KEYS.preAuthState);
     if (state !== savedState) {
-      console.error("[gmail-auth] State mismatch — possible CSRF attack");
       this.cleanupRedirectParams();
-      return false;
+      throw new Error("OAuth state mismatch — please sign in again");
     }
 
     // Get code verifier for PKCE
     const codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
     if (!codeVerifier) {
-      console.error("[gmail-auth] No code_verifier found");
       this.cleanupRedirectParams();
-      return false;
+      throw new Error("Missing PKCE verifier — please sign in again");
     }
 
     try {
       await this.exchangeCodeForTokens(code, codeVerifier);
       console.log("[gmail-auth] OAuth completed successfully");
     } catch (err) {
-      console.error("[gmail-auth] Token exchange failed:", err);
       this.cleanupRedirectParams();
-      return false;
+      throw new Error(`Token exchange failed: ${String(err)}`);
     }
 
     this.cleanupRedirectParams();
@@ -136,6 +136,7 @@ export class GmailAuthService {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: GMAIL_CONFIG.CLIENT_ID,
+        client_secret: GMAIL_CONFIG.CLIENT_SECRET,
         code,
         code_verifier: codeVerifier,
         grant_type: "authorization_code",
@@ -171,6 +172,7 @@ export class GmailAuthService {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: GMAIL_CONFIG.CLIENT_ID,
+        client_secret: GMAIL_CONFIG.CLIENT_SECRET,
         refresh_token: refreshToken,
         grant_type: "refresh_token",
       }),

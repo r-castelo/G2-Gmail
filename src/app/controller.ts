@@ -211,6 +211,12 @@ export class Controller {
       await this.glass.showMessage(APP_TEXT.loadingMessage);
       const full = await this.gmail.getMessage(messageId);
 
+      // Mark as read (fire-and-forget, don't block reader)
+      this.gmail.markAsRead(messageId).catch((err) =>
+        console.error("[controller] Failed to mark as read:", err),
+      );
+      this.state.markMessageRead(messageId);
+
       // Convert body to plain text lines
       const bodyLines = htmlToPlainText(full.bodyHtml, full.bodyText);
 

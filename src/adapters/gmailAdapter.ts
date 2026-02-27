@@ -166,6 +166,20 @@ export class GmailAdapterImpl implements GmailAdapter {
     };
   }
 
+  /**
+   * Mark a message as read by removing the UNREAD label.
+   */
+  async markAsRead(messageId: string): Promise<void> {
+    await this.apiFetch(
+      `/users/me/messages/${messageId}/modify`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+      },
+    );
+  }
+
   // --- Private helpers ---
 
   /**
@@ -314,21 +328,23 @@ export class GmailAdapterImpl implements GmailAdapter {
    * Make an authenticated fetch to the Gmail API.
    * Auto-retries once with a forced token refresh on 401.
    */
-  private async apiFetch<T>(path: string, retry = true): Promise<T> {
+  private async apiFetch<T>(path: string, init?: RequestInit, retry = true): Promise<T> {
     const token = await this.auth.getAccessToken();
     const url = path.startsWith("http")
       ? path
       : `${GMAIL_CONFIG.API_BASE}${path}`;
 
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      ...init,
+      headers: { ...init?.headers, Authorization: `Bearer ${token}` },
     });
 
     if (response.status === 401 && retry) {
       console.log("[gmail] 401 — forcing token refresh");
       const newToken = await this.auth.forceRefresh();
       const retryResponse = await fetch(url, {
-        headers: { Authorization: `Bearer ${newToken}` },
+        ...init,
+        headers: { ...init?.headers, Authorization: `Bearer ${newToken}` },
       });
 
       if (!retryResponse.ok) {

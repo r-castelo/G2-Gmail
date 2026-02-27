@@ -129,7 +129,7 @@ export class GmailStateMachine {
 
   /**
    * Set messages for a label and transition to MESSAGE_LIST mode.
-   * Display format: "* From      Subject..." (64 chars max, * for unread)
+   * Display format: "* From · Subject..." (middle dot separator, * for unread)
    */
   setMessages(
     labelId: string,
@@ -151,13 +151,13 @@ export class GmailStateMachine {
 
   /**
    * Format a message as a single line for the list display.
-   * Format: "* From      Subject..." or "  From      Subject..."
+   * Format: "* From · Subject..." — middle dot separator, no extra padding.
    */
   private formatMessageLine(msg: GmailMessageHeader): string {
     const maxLen = TEXT_LAYOUT.CHARS_PER_LINE;
-    const unreadMarker = msg.isUnread ? "*" : " ";
-    const from = msg.from.slice(0, 12).padEnd(12);
-    const prefix = `${unreadMarker} ${from} `;
+    const unreadMarker = msg.isUnread ? "[u]" : "[r]";
+    const from = msg.from.slice(0, 14);
+    const prefix = `${unreadMarker} ${from} · `;
     const remaining = maxLen - prefix.length;
     const subject = msg.subject.length > remaining
       ? msg.subject.slice(0, remaining - 3) + "..."
@@ -232,6 +232,15 @@ export class GmailStateMachine {
   }
 
   // --- Navigation ---
+
+  markMessageRead(messageId: string): void {
+    const idx = this.state.messages.findIndex((m) => m.id === messageId);
+    if (idx === -1) return;
+    const msg = this.state.messages[idx]!;
+    const updated = { ...msg, isUnread: false };
+    this.state.messages[idx] = updated;
+    this.state.messageDisplayItems[idx] = this.formatMessageLine(updated);
+  }
 
   backToLabels(): void {
     this.state.mode = "LABELS";

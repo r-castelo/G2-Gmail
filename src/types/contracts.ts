@@ -74,4 +74,5 @@ export interface GmailAdapter {
     pageToken?: string,
   ): Promise<{ messages: GmailMessageHeader[]; nextPageToken?: string }>;
   getMessage(messageId: string): Promise<GmailMessageFull>;
+  markAsRead(messageId: string): Promise<void>;
 }

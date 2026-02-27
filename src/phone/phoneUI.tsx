@@ -207,15 +207,6 @@ interface PhoneUIAppProps {
 function PhoneUIApp({ ui }: PhoneUIAppProps): JSX.Element {
   const snapshot = usePhoneUISnapshot(ui);
 
-  // Show status-only view while connecting/errored and not yet authenticated
-  if (snapshot.status.state !== "connected" && !snapshot.isAuthenticated) {
-    return (
-      <div className="er-phone-app">
-        <StatusOnlyView status={snapshot.status} />
-      </div>
-    );
-  }
-
   return (
     <div className="er-phone-app">
       <AuthenticatedView
