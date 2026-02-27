@@ -83,6 +83,7 @@ interface PhoneUISnapshot {
   isAuthenticated: boolean;
   email: string;
   labels: GmailLabel[];
+  selectedLabelId: string | null;
 }
 
 // ── PhoneUI controller ────────────────────────────────────────
@@ -99,6 +100,7 @@ export class PhoneUI {
 
   private email = "";
   private labels: GmailLabel[] = [];
+  private selectedLabelId: string | null = null;
 
   constructor(options: PhoneUIOptions) {
     this.onSignIn = options.onSignIn;
@@ -133,6 +135,7 @@ export class PhoneUI {
       isAuthenticated: this.isAuthenticatedFn(),
       email: this.email,
       labels: [...this.labels],
+      selectedLabelId: this.selectedLabelId,
     };
   }
 
@@ -170,6 +173,11 @@ export class PhoneUI {
     this.onSignOut();
     this.email = "";
     this.labels = [];
+    this.emit();
+  }
+
+  setSelectedLabel(labelId: string | null): void {
+    this.selectedLabelId = labelId;
     this.emit();
   }
 
@@ -220,6 +228,7 @@ function PhoneUIApp({ ui }: PhoneUIAppProps): JSX.Element {
         onLabelSelect={(label) => {
           ui.handleLabelSelect(label);
         }}
+        selectedLabelId={snapshot.selectedLabelId}
       />
     </div>
   );
@@ -264,6 +273,7 @@ interface AuthenticatedViewProps {
   onSignIn: () => void;
   onSignOut: () => void;
   onLabelSelect: (label: GmailLabel) => void;
+  selectedLabelId: string | null;
 }
 
 function AuthenticatedView({
@@ -271,6 +281,7 @@ function AuthenticatedView({
   onSignIn,
   onSignOut,
   onLabelSelect,
+  selectedLabelId,
 }: AuthenticatedViewProps): JSX.Element {
   return (
     <div className="er-status-view">
@@ -306,6 +317,7 @@ function AuthenticatedView({
                   <LabelList
                     labels={snapshot.labels}
                     onLabelSelect={onLabelSelect}
+                    selectedLabelId={selectedLabelId}
                   />
                 </>
               )}
@@ -329,9 +341,10 @@ function AuthenticatedView({
 interface LabelListProps {
   labels: GmailLabel[];
   onLabelSelect: (label: GmailLabel) => void;
+  selectedLabelId: string | null;
 }
 
-function LabelList({ labels, onLabelSelect }: LabelListProps): JSX.Element {
+function LabelList({ labels, onLabelSelect, selectedLabelId }: LabelListProps): JSX.Element {
   return (
     <div className="er-label-list">
       <Text as="h2" variant="title-2">Labels</Text>
@@ -340,7 +353,7 @@ function LabelList({ labels, onLabelSelect }: LabelListProps): JSX.Element {
           key={label.id}
           variant="default"
           size="md"
-          className="er-label-entry"
+          className={`er-label-entry${label.id === selectedLabelId ? " er-label-selected" : ""}`}
           onClick={() => {
             onLabelSelect(label);
           }}

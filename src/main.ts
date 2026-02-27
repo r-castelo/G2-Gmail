@@ -36,7 +36,8 @@ async function bootstrap(): Promise<void> {
       window.location.reload();
     },
     onLabelSelect: (label) => {
-      console.log("[main] Phone selected label:", label.name);
+      phoneUI.setSelectedLabel(label.id);
+      void controller.selectLabel(label.id, label.name);
     },
     isAuthenticated: () => auth.isAuthenticated(),
     getEmail: async () => gmail.getProfile(),

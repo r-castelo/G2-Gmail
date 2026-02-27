@@ -98,6 +98,12 @@ body {
   white-space: nowrap;
 }
 
+/* ── Selected label highlight ──────────────────────────────── */
+.er-label-entry.er-label-selected {
+  background: var(--color-bc-accent-pressed);
+  color: var(--color-tc-on-accent);
+}
+
 /* ── Muted / secondary text ─────────────────────────────────── */
 .er-muted-text {
   color: var(--color-tc-2);
