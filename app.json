@@ -1,0 +1,19 @@
+{
+  "package_id": "com.renato.g2gmail",
+  "edition": "202601",
+  "name": "G2 Gmail Reader",
+  "version": "0.1.0",
+  "min_app_version": "0.1.0",
+  "tagline": "Read Gmail on G2 glasses",
+  "description": "Browse Gmail labels, navigate email lists, and read emails as paginated plain text on Even Realities G2.",
+  "author": "Renato Castelo Branco Camargo Pereira",
+  "entrypoint": "index.html",
+  "permissions": {
+    "network": [
+      "evenhub.evenrealities.com",
+      "accounts.google.com",
+      "oauth2.googleapis.com",
+      "gmail.googleapis.com"
+    ]
+  }
+}

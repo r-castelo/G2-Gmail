@@ -1,0 +1,104 @@
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-sans);
+}
+
+#app {
+  min-height: 100vh;
+  background: var(--color-bc-1);
+}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.er-phone-app {
+  min-height: 100vh;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: var(--layout-page-padding);
+}
+
+/* ── Status view (connecting / error before auth) ───────────── */
+.er-status-view {
+  min-height: calc(100vh - (var(--layout-page-padding) * 2));
+}
+
+.er-status-content {
+  display: grid;
+  gap: var(--space-12);
+}
+
+/* ── Status chip (dot + label) ──────────────────────────────── */
+.er-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.er-status-dot-connecting {
+  color: var(--color-bc-accent-pressed);
+}
+
+.er-status-dot-connected {
+  color: var(--color-tc-green);
+}
+
+.er-status-dot-error {
+  color: var(--color-tc-red);
+}
+
+/* ── Auth card content ──────────────────────────────────────── */
+.er-auth-content {
+  display: grid;
+  gap: var(--space-12);
+}
+
+/* ── Account info row (email chip + sign-out button) ────────── */
+.er-account-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Label list ─────────────────────────────────────────────── */
+.er-label-list {
+  display: grid;
+  gap: var(--layout-section-gap);
+}
+
+.er-label-entry {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: var(--space-32);
+  padding-inline: var(--space-12);
+}
+
+.er-label-icon {
+  width: var(--space-20);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-tc-2);
+}
+
+.er-label-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  text-align: left;
+}
+
+.er-label-text .text-app-body-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Muted / secondary text ─────────────────────────────────── */
+.er-muted-text {
+  color: var(--color-tc-2);
+}
