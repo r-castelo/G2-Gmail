@@ -64,6 +64,20 @@ body {
   justify-content: space-between;
 }
 
+/* ── Token relay textarea ──────────────────────────────────── */
+.er-token-textarea {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.85rem;
+  padding: var(--space-8);
+  border: 1px solid var(--color-bc-3);
+  border-radius: var(--radius-sm, 6px);
+  resize: vertical;
+  background: var(--color-bc-2);
+  color: var(--color-tc-1);
+  box-sizing: border-box;
+}
+
 /* ── Muted / secondary text ─────────────────────────────────── */
 .er-muted-text {
   color: var(--color-tc-2);

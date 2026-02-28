@@ -12,7 +12,7 @@ import {
   LogOutIcon,
   LoginIcon,
 } from "@jappyjan/even-realities-ui/icons";
-import { useCallback, useSyncExternalStore, type JSX } from "react";
+import { useCallback, useState, useSyncExternalStore, type JSX } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import "./phoneUI.css";
 
@@ -21,6 +21,7 @@ import "./phoneUI.css";
 export interface PhoneUIOptions {
   onSignIn: () => Promise<void>;
   onSignOut: () => void;
+  onImportToken: (token: string) => void;
   isAuthenticated: () => boolean;
   getEmail: () => Promise<string>;
 }
@@ -67,10 +68,14 @@ export function setPhoneState(state: PhoneState, text: string, detail?: string):
 
 // ── Snapshot type ──────────────────────────────────────────────
 
+type ViewMode = "normal" | "token-paste" | "token-relay";
+
 interface PhoneUISnapshot {
   status: PhoneStatusSnapshot;
   isAuthenticated: boolean;
   email: string;
+  viewMode: ViewMode;
+  relayToken: string;
 }
 
 // ── PhoneUI controller ────────────────────────────────────────
@@ -78,6 +83,7 @@ interface PhoneUISnapshot {
 export class PhoneUI {
   private readonly onSignIn: () => Promise<void>;
   private readonly onSignOut: () => void;
+  private readonly onImportTokenFn: (token: string) => void;
   private readonly isAuthenticatedFn: () => boolean;
   private readonly getEmailFn: () => Promise<string>;
 
@@ -85,11 +91,14 @@ export class PhoneUI {
   private readonly listeners = new Set<() => void>();
 
   private email = "";
+  private viewMode: ViewMode = "normal";
+  private relayToken = "";
   private cachedSnapshot!: PhoneUISnapshot;
 
   constructor(options: PhoneUIOptions) {
     this.onSignIn = options.onSignIn;
     this.onSignOut = options.onSignOut;
+    this.onImportTokenFn = options.onImportToken;
     this.isAuthenticatedFn = options.isAuthenticated;
     this.getEmailFn = options.getEmail;
 
@@ -124,6 +133,8 @@ export class PhoneUI {
       status: currentPhoneStatus,
       isAuthenticated: this.isAuthenticatedFn(),
       email: this.email,
+      viewMode: this.viewMode,
+      relayToken: this.relayToken,
     };
   }
 
@@ -152,6 +163,26 @@ export class PhoneUI {
   handleSignOut(): void {
     this.onSignOut();
     this.email = "";
+    this.viewMode = "normal";
+    this.emit();
+  }
+
+  handleImportToken(token: string): void {
+    this.onImportTokenFn(token);
+    this.viewMode = "normal";
+    this.emit();
+  }
+
+  /** Show the "paste token" screen (WebView side of relay flow). */
+  showTokenPasteScreen(): void {
+    this.viewMode = "token-paste";
+    this.emit();
+  }
+
+  /** Show the "copy token" screen (system browser side of relay flow). */
+  showRelayTokenScreen(token: string): void {
+    this.relayToken = token;
+    this.viewMode = "token-relay";
     this.emit();
   }
 
@@ -182,15 +213,27 @@ function PhoneUIApp({ ui }: PhoneUIAppProps): JSX.Element {
 
   return (
     <div className="er-phone-app">
-      <AuthenticatedView
-        snapshot={snapshot}
-        onSignIn={() => {
-          void ui.handleSignIn();
-        }}
-        onSignOut={() => {
-          ui.handleSignOut();
-        }}
-      />
+      {snapshot.viewMode === "token-paste" && (
+        <TokenPasteView
+          onSubmit={(token) => {
+            ui.handleImportToken(token);
+          }}
+        />
+      )}
+      {snapshot.viewMode === "token-relay" && (
+        <TokenRelayView token={snapshot.relayToken} />
+      )}
+      {snapshot.viewMode === "normal" && (
+        <AuthenticatedView
+          snapshot={snapshot}
+          onSignIn={() => {
+            void ui.handleSignIn();
+          }}
+          onSignOut={() => {
+            ui.handleSignOut();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -243,6 +286,94 @@ function AuthenticatedView({
             {snapshot.status.text}
           </Chip>
         </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
+// ── Token paste view (WebView side of relay auth) ─────────────
+
+interface TokenPasteViewProps {
+  onSubmit: (token: string) => void;
+}
+
+function TokenPasteView({ onSubmit }: TokenPasteViewProps): JSX.Element {
+  const [token, setToken] = useState("");
+
+  return (
+    <div className="er-status-view">
+      <Card>
+        <CardHeader>
+          <Text as="h1" variant="title-lg">G2-mail</Text>
+          <Text as="p" variant="subtitle" className="er-muted-text">
+            Paste sign-in token
+          </Text>
+        </CardHeader>
+        <CardContent className="er-auth-content">
+          <Text as="p">
+            Complete sign-in in the browser that just opened,
+            then copy the token and paste it here.
+          </Text>
+          <textarea
+            className="er-token-textarea"
+            placeholder="Paste token here..."
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            rows={4}
+          />
+          <Button
+            variant="accent"
+            size="lg"
+            onClick={() => {
+              const trimmed = token.trim();
+              if (trimmed) onSubmit(trimmed);
+            }}
+          >
+            Submit
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Token relay view (system browser side of relay auth) ───────
+
+interface TokenRelayViewProps {
+  token: string;
+}
+
+function TokenRelayView({ token }: TokenRelayViewProps): JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(token).then(() => setCopied(true));
+  };
+
+  return (
+    <div className="er-status-view">
+      <Card>
+        <CardHeader>
+          <Text as="h1" variant="title-lg">G2-mail</Text>
+          <Text as="p" variant="subtitle" className="er-muted-text">
+            Sign-in complete
+          </Text>
+        </CardHeader>
+        <CardContent className="er-auth-content">
+          <Text as="p">
+            Copy the token below and paste it in the G2-mail app.
+          </Text>
+          <textarea
+            className="er-token-textarea"
+            readOnly
+            value={token}
+            rows={4}
+            onFocus={(e) => e.target.select()}
+          />
+          <Button variant="accent" size="lg" onClick={handleCopy}>
+            {copied ? "Copied!" : "Copy token"}
+          </Button>
+        </CardContent>
       </Card>
     </div>
   );

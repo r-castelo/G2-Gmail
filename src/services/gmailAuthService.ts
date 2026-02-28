@@ -23,6 +23,21 @@ export class GmailAuthService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
 
+  // --- WebView detection ---
+
+  /**
+   * Detect if the app is running inside an embedded WebView (e.g. EvenHub).
+   * Google OAuth blocks sign-in from WebViews with `disallowed_useragent`.
+   */
+  static isWebView(): boolean {
+    const ua = navigator.userAgent;
+    // Android WebView includes "; wv)" in the UA string
+    if (/; wv\)/.test(ua)) return true;
+    // iOS WebView: has iPhone/iPad but no "Safari/" (real Safari always includes it)
+    if (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)) return true;
+    return false;
+  }
+
   // --- PKCE ---
 
   /**
@@ -59,9 +74,19 @@ export class GmailAuthService {
 
   /**
    * Initiate OAuth: build auth URL, save state to localStorage, redirect.
-   * This does a full-page navigation — the function never returns normally.
+   *
+   * In a WebView, Google blocks the redirect (`disallowed_useragent`).
+   * Instead we open the app URL in the system browser with `?startauth=1`
+   * so OAuth happens there, and the user copies the refresh token back.
+   *
+   * Returns `'redirect'` for normal flow, `'relay'` for WebView relay.
    */
-  async startAuth(): Promise<void> {
+  async startAuth(): Promise<"redirect" | "relay"> {
+    if (GmailAuthService.isWebView()) {
+      window.open(`${GMAIL_CONFIG.REDIRECT_URI}?startauth=1`, "_blank");
+      return "relay";
+    }
+
     const codeVerifier = this.generateCodeVerifier();
     const codeChallenge = await this.generateCodeChallenge(codeVerifier);
     const state = crypto.randomUUID();
@@ -82,6 +107,7 @@ export class GmailAuthService {
     });
 
     window.location.href = `${GMAIL_CONFIG.AUTH_ENDPOINT}?${params.toString()}`;
+    return "redirect";
   }
 
   /**
@@ -214,6 +240,13 @@ export class GmailAuthService {
    */
   isAuthenticated(): boolean {
     return !!localStorage.getItem(STORAGE_KEYS.refreshToken);
+  }
+
+  /**
+   * Import a refresh token obtained via the browser-relay flow.
+   */
+  importRefreshToken(token: string): void {
+    localStorage.setItem(STORAGE_KEYS.refreshToken, token);
   }
 
   /**
