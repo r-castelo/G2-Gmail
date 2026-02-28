@@ -132,15 +132,24 @@ export class GmailAdapterImpl implements GmailAdapter {
       return { messages: [] };
     }
 
-    // Step 2: Batch-fetch metadata for all messages in a single HTTP request
+    // Step 2: Fetch metadata for each message sequentially with pacing.
+    // Individual GETs are reliable in WebView; batch POST is not.
     const ids = listData.messages.map((m) => m.id).filter((id): id is string => !!id);
-    await onProgress?.(`Got ${ids.length} IDs. Batch fetching...`);
-    console.log(`[gmail] listMessages: batch-fetching headers for ${ids.length} messages`);
-    const headers = await this.batchFetchMessageHeaders(ids);
-    console.log(`[gmail] batch: parsed ${headers.length} messages`);
+    console.log(`[gmail] listMessages: fetching headers for ${ids.length} messages`);
+    const headers: GmailMessageHeader[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      await onProgress?.(`Loading ${i + 1}/${ids.length}...`);
+      const header = await this.fetchMessageHeader(ids[i]!);
+      if (header) headers.push(header);
+      // Small delay between requests to avoid flooding WebView network stack
+      if (i < ids.length - 1) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    console.log(`[gmail] fetched ${headers.length}/${ids.length} headers`);
 
     return {
-      messages: headers.filter((h): h is GmailMessageHeader => h !== null),
+      messages: headers,
       nextPageToken: listData.nextPageToken,
     };
   }

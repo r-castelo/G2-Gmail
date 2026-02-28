@@ -50,7 +50,7 @@ export const SYSTEM_LABELS = [
   { id: "UNREAD", name: "Unread" },
 ] as const;
 
-export const MESSAGES_PER_PAGE = 20;
+export const MESSAGES_PER_PAGE = 10;
 
 export const APP_TEXT = {
   booting: "Loading...",
