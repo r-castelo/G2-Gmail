@@ -194,6 +194,8 @@ export class Controller {
     if (gesture.kind === "SCROLL_FWD") {
       if (this.state.moveMessageCursor(1)) {
         await this.renderMessageListUpdate();
+      } else if (this.state.cursorAtEnd && this.state.hasMoreMessages) {
+        await this.loadMoreMessages();
       }
       return;
     }
@@ -215,6 +217,37 @@ export class Controller {
     if (gesture.kind === "TAP") {
       const msg = this.state.getMessageAtCursor();
       if (msg) await this.openMessage(msg.id);
+    }
+  }
+
+  /**
+   * Lazy-load next page of messages when cursor reaches the end.
+   */
+  private async loadMoreMessages(): Promise<void> {
+    const { currentLabelId, currentLabelName, nextPageToken } = this.state.snapshot;
+    if (!nextPageToken) return;
+
+    try {
+      await this.glass.updateMessageListText(
+        this.state.getMessageListText().replace(/\n*$/, "\n  Loading..."),
+        this.messageListStatus(),
+      );
+
+      const result = await this.gmail.listMessages(
+        currentLabelId,
+        MESSAGES_PER_PAGE,
+        nextPageToken,
+      );
+
+      this.state.appendMessages(result.messages, result.nextPageToken);
+      // Move cursor to first message of newly loaded page
+      this.state.moveMessageCursor(1);
+      await this.renderMessageListUpdate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[controller] Failed to load more messages:", msg);
+      // Show error briefly then restore list
+      await this.renderMessageListUpdate();
     }
   }
 
@@ -292,7 +325,8 @@ export class Controller {
   private messageListStatus(): string {
     const labelName = this.state.snapshot.currentLabelName;
     const count = this.state.snapshot.messages.length;
-    return `${labelName} (${count})`;
+    const more = this.state.hasMoreMessages ? "+" : "";
+    return `${labelName} (${count}${more})`;
   }
 
   private async renderMessageList(): Promise<void> {

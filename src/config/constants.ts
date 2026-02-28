@@ -50,7 +50,8 @@ export const SYSTEM_LABELS = [
   { id: "UNREAD", name: "Unread" },
 ] as const;
 
-export const MESSAGES_PER_PAGE = 10;
+/** Number of messages fetched per batch (matches LINES_PER_PAGE for lazy loading). */
+export const MESSAGES_PER_PAGE = 8;
 
 export const APP_TEXT = {
   booting: "Loading...",

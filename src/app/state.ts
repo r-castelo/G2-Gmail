@@ -153,6 +153,30 @@ export class GmailStateMachine {
   }
 
   /**
+   * Append more messages to the current list (lazy loading).
+   */
+  appendMessages(
+    messages: GmailMessageHeader[],
+    nextPageToken?: string,
+  ): void {
+    this.state.messages.push(...messages);
+    this.state.nextPageToken = nextPageToken;
+    for (const msg of messages) {
+      this.state.messageDisplayItems.push(this.formatMessageLine(msg));
+    }
+  }
+
+  /** Whether more messages can be loaded from the API. */
+  get hasMoreMessages(): boolean {
+    return !!this.state.nextPageToken;
+  }
+
+  /** Whether cursor is at the last loaded message. */
+  get cursorAtEnd(): boolean {
+    return this.state.messageCursor >= this.state.messages.length - 1;
+  }
+
+  /**
    * Format a message as a single line for the list display.
    * Leaves 2 chars for cursor prefix ("> " or "  ").
    * Format: "From · Subject..."
