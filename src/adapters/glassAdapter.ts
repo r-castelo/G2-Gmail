@@ -97,14 +97,26 @@ export class GlassAdapterImpl implements GlassAdapter {
       height: GLASS_LAYOUT.height,
       containerID: CONTAINER_IDS.content,
       containerName: CONTAINER_NAMES.content,
-      isEventCapture: 1,
+      isEventCapture: 0,
       content: textContent.slice(0, 1000),
     });
 
     const statusContainer = this.makeStatusContainer(statusText);
+    // Use a separate event-capture container to receive gestures
+    // without the firmware scrolling the text content
+    const eventContainer = new TextContainerProperty({
+      xPosition: 0,
+      yPosition: 0,
+      width: 1,
+      height: 1,
+      containerID: CONTAINER_IDS.statusRight,
+      containerName: CONTAINER_NAMES.statusRight,
+      isEventCapture: 1,
+      content: "",
+    });
 
     await this.renderContainers({
-      textObject: [msgContainer, statusContainer],
+      textObject: [msgContainer, statusContainer, eventContainer],
     });
     this.currentMode = "messageList";
   }
