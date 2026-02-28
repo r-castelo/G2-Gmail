@@ -128,12 +128,12 @@ export class GmailAdapterImpl implements GmailAdapter {
       return { messages: [] };
     }
 
-    // Step 2: Fetch metadata for each message
-    const headers = await Promise.all(
-      listData.messages
-        .filter((m) => m.id)
-        .map((m) => this.fetchMessageHeader(m.id!)),
-    );
+    // Step 2: Fetch metadata for each message (sequential to avoid flooding)
+    const ids = listData.messages.filter((m) => m.id).map((m) => m.id!);
+    const headers: (GmailMessageHeader | null)[] = [];
+    for (const id of ids) {
+      headers.push(await this.fetchMessageHeader(id));
+    }
 
     return {
       messages: headers.filter((h): h is GmailMessageHeader => h !== null),
@@ -334,30 +334,43 @@ export class GmailAdapterImpl implements GmailAdapter {
       ? path
       : `${GMAIL_CONFIG.API_BASE}${path}`;
 
-    const response = await fetch(url, {
-      ...init,
-      headers: { ...init?.headers, Authorization: `Bearer ${token}` },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
 
-    if (response.status === 401 && retry) {
-      console.log("[gmail] 401 — forcing token refresh");
-      const newToken = await this.auth.forceRefresh();
-      const retryResponse = await fetch(url, {
+    try {
+      const response = await fetch(url, {
         ...init,
-        headers: { ...init?.headers, Authorization: `Bearer ${newToken}` },
+        headers: { ...init?.headers, Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
 
-      if (!retryResponse.ok) {
-        throw new Error(`Gmail API error: ${retryResponse.status}`);
+      if (response.status === 401 && retry) {
+        console.log("[gmail] 401 — forcing token refresh");
+        const newToken = await this.auth.forceRefresh();
+        const retryController = new AbortController();
+        const retryTimeout = setTimeout(() => retryController.abort(), 15_000);
+        try {
+          const retryResponse = await fetch(url, {
+            ...init,
+            headers: { ...init?.headers, Authorization: `Bearer ${newToken}` },
+            signal: retryController.signal,
+          });
+          if (!retryResponse.ok) {
+            throw new Error(`Gmail API error: ${retryResponse.status}`);
+          }
+          return (await retryResponse.json()) as T;
+        } finally {
+          clearTimeout(retryTimeout);
+        }
       }
 
-      return (await retryResponse.json()) as T;
-    }
+      if (!response.ok) {
+        throw new Error(`Gmail API error: ${response.status}`);
+      }
 
-    if (!response.ok) {
-      throw new Error(`Gmail API error: ${response.status}`);
+      return (await response.json()) as T;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return (await response.json()) as T;
   }
 }
