@@ -13,6 +13,7 @@ export interface AppState {
   currentLabelName: string;
   messages: GmailMessageHeader[];
   messageDisplayItems: string[];
+  messageCursor: number;
   nextPageToken?: string;
   currentMessageId: string;
   currentSubject: string;
@@ -33,6 +34,7 @@ export class GmailStateMachine {
       currentLabelName: "",
       messages: [],
       messageDisplayItems: [],
+      messageCursor: 0,
       nextPageToken: undefined,
       currentMessageId: "",
       currentSubject: "",
@@ -141,6 +143,7 @@ export class GmailStateMachine {
     this.state.currentLabelId = labelId;
     this.state.currentLabelName = labelName;
     this.state.messages = [...messages];
+    this.state.messageCursor = 0;
     this.state.nextPageToken = nextPageToken;
     this.state.errorMessage = null;
 
@@ -151,11 +154,12 @@ export class GmailStateMachine {
 
   /**
    * Format a message as a single line for the list display.
-   * Format: "* From · Subject..." — middle dot separator, no extra padding.
+   * Leaves 2 chars for cursor prefix ("> " or "  ").
+   * Format: "From · Subject..."
    */
   private formatMessageLine(msg: GmailMessageHeader): string {
-    const maxLen = TEXT_LAYOUT.CHARS_PER_LINE;
-    const unreadMarker = msg.isUnread ? "[u]" : "[r]";
+    const maxLen = TEXT_LAYOUT.CHARS_PER_LINE - 2; // reserve 2 for cursor
+    const unreadMarker = msg.isUnread ? "*" : " ";
     const from = msg.from.slice(0, 14);
     const prefix = `${unreadMarker} ${from} · `;
     const remaining = maxLen - prefix.length;
@@ -166,10 +170,53 @@ export class GmailStateMachine {
   }
 
   /**
+   * Move message cursor. Returns true if cursor moved.
+   */
+  moveMessageCursor(delta: number): boolean {
+    const next = this.state.messageCursor + delta;
+    if (next < 0 || next >= this.state.messages.length) return false;
+    this.state.messageCursor = next;
+    return true;
+  }
+
+  /**
+   * Get the message at the current cursor position.
+   */
+  getMessageAtCursor(): GmailMessageHeader | null {
+    return this.state.messages[this.state.messageCursor] ?? null;
+  }
+
+  /**
    * Get the message at a display index.
    */
   getMessageAtIndex(displayIndex: number): GmailMessageHeader | null {
     return this.state.messages[displayIndex] ?? null;
+  }
+
+  /**
+   * Get message list rendered as text with cursor marker.
+   * Shows a page of LINES_PER_PAGE messages around the cursor.
+   */
+  getMessageListText(): string {
+    const items = this.state.messageDisplayItems;
+    const cursor = this.state.messageCursor;
+    const perPage = TEXT_LAYOUT.LINES_PER_PAGE;
+
+    // Calculate which page the cursor is on
+    const page = Math.floor(cursor / perPage);
+    const start = page * perPage;
+    const end = Math.min(start + perPage, items.length);
+
+    const lines: string[] = [];
+    for (let i = start; i < end; i++) {
+      const marker = i === cursor ? "> " : "  ";
+      lines.push(`${marker}${items[i]}`);
+    }
+    // Pad to full page height
+    while (lines.length < perPage) {
+      lines.push("");
+    }
+    return lines.join("\n");
   }
 
   getMessageDisplayItems(): string[] {
@@ -246,6 +293,7 @@ export class GmailStateMachine {
     this.state.mode = "LABELS";
     this.state.messages = [];
     this.state.messageDisplayItems = [];
+    this.state.messageCursor = 0;
     this.state.currentLabelId = "";
     this.state.currentLabelName = "";
   }

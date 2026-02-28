@@ -179,9 +179,7 @@ export class Controller {
         result.nextPageToken,
       );
 
-      // Small delay to let firmware settle after progress message rebuilds
-      await new Promise((r) => setTimeout(r, 400));
-      await this.renderMessageListWithTimeout();
+      await this.renderMessageList();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[controller] Failed to load messages:", msg);
@@ -193,8 +191,17 @@ export class Controller {
   // --- Message list mode ---
 
   private async handleMessageList(gesture: GestureEvent): Promise<void> {
-    // List scroll is handled by firmware
-    if (gesture.kind === "SCROLL_FWD" || gesture.kind === "SCROLL_BACK") {
+    if (gesture.kind === "SCROLL_FWD") {
+      if (this.state.moveMessageCursor(1)) {
+        await this.renderMessageListUpdate();
+      }
+      return;
+    }
+
+    if (gesture.kind === "SCROLL_BACK") {
+      if (this.state.moveMessageCursor(-1)) {
+        await this.renderMessageListUpdate();
+      }
       return;
     }
 
@@ -206,16 +213,9 @@ export class Controller {
     }
 
     if (gesture.kind === "TAP") {
-      await this.handleMessageTap(gesture.listIndex);
+      const msg = this.state.getMessageAtCursor();
+      if (msg) await this.openMessage(msg.id);
     }
-  }
-
-  private async handleMessageTap(listIndex?: number): Promise<void> {
-    const idx = listIndex ?? 0;
-    const msg = this.state.getMessageAtIndex(idx);
-    if (!msg) return;
-
-    await this.openMessage(msg.id);
   }
 
   private async openMessage(messageId: string): Promise<void> {
@@ -289,32 +289,20 @@ export class Controller {
     await this.glass.showLabels(items, `${count} labels`);
   }
 
-  private async renderMessageList(): Promise<void> {
-    const items = this.state.getMessageDisplayItems();
+  private messageListStatus(): string {
     const labelName = this.state.snapshot.currentLabelName;
-    const count = items.length;
-    const status = `${labelName} (${count})`;
-    await this.glass.showMessageList(items, status);
+    const count = this.state.snapshot.messages.length;
+    return `${labelName} (${count})`;
   }
 
-  /**
-   * Render message list with a timeout. If rebuildPageContainer hangs
-   * (firmware issue with large lists), show error after 10s.
-   */
-  private async renderMessageListWithTimeout(): Promise<void> {
-    const items = this.state.getMessageDisplayItems();
-    const labelName = this.state.snapshot.currentLabelName;
-    const count = items.length;
-    const status = `${labelName} (${count})`;
+  private async renderMessageList(): Promise<void> {
+    const text = this.state.getMessageListText();
+    await this.glass.showMessageList([text], this.messageListStatus());
+  }
 
-    await Promise.race([
-      this.glass.showMessageList(items, status),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(
-          `List render hung (${count} items, ${items.join("").length} chars total)`
-        )), 10_000),
-      ),
-    ]);
+  private async renderMessageListUpdate(): Promise<void> {
+    const text = this.state.getMessageListText();
+    await this.glass.updateMessageListText(text, this.messageListStatus());
   }
 
   private async renderReaderFull(): Promise<void> {

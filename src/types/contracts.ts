@@ -60,6 +60,7 @@ export interface GlassAdapter {
   onGesture(handler: (event: GestureEvent) => void): Unsubscribe;
   showLabels(items: string[], statusText: string): Promise<void>;
   showMessageList(items: string[], statusText: string): Promise<void>;
+  updateMessageListText(text: string, statusText: string): Promise<void>;
   showReader(pageText: string, status: StatusBar): Promise<void>;
   updateReaderText(pageText: string, status: StatusBar): Promise<void>;
   showMessage(text: string): Promise<void>;

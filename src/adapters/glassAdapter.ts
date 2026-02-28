@@ -84,11 +84,13 @@ export class GlassAdapterImpl implements GlassAdapter {
   }
 
   /**
-   * Show the message list on glasses.
-   * Always rebuilds because list items can't be updated in-place.
+   * Show the message list on glasses as a text container.
+   * Uses text instead of ListContainerProperty to avoid firmware hang
+   * on rebuildPageContainer with large lists.
    */
   async showMessageList(items: string[], statusText: string): Promise<void> {
-    const listContainer = new ListContainerProperty({
+    const textContent = items.join("\n");
+    const msgContainer = new TextContainerProperty({
       xPosition: GLASS_LAYOUT.x,
       yPosition: GLASS_LAYOUT.y,
       width: GLASS_LAYOUT.width,
@@ -96,20 +98,43 @@ export class GlassAdapterImpl implements GlassAdapter {
       containerID: CONTAINER_IDS.content,
       containerName: CONTAINER_NAMES.content,
       isEventCapture: 1,
-      itemContainer: new ListItemContainerProperty({
-        itemCount: items.length,
-        itemName: items,
-        isItemSelectBorderEn: 1,
-      }),
+      content: textContent.slice(0, 1000),
     });
 
     const statusContainer = this.makeStatusContainer(statusText);
 
     await this.renderContainers({
-      listObject: [listContainer],
-      textObject: [statusContainer],
+      textObject: [msgContainer, statusContainer],
     });
     this.currentMode = "messageList";
+  }
+
+  /**
+   * Fast in-place update of message list text (cursor movement).
+   * No rebuild needed — uses textContainerUpgrade.
+   */
+  async updateMessageListText(text: string, statusText: string): Promise<void> {
+    if (!this.bridge) throw new Error("Not connected");
+
+    await this.bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: CONTAINER_IDS.content,
+        containerName: CONTAINER_NAMES.content,
+        contentOffset: 0,
+        contentLength: text.length,
+        content: text.slice(0, 2000),
+      }),
+    );
+
+    await this.bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: CONTAINER_IDS.status,
+        containerName: CONTAINER_NAMES.status,
+        contentOffset: 0,
+        contentLength: statusText.length,
+        content: statusText.slice(0, 2000),
+      }),
+    );
   }
 
   /**
