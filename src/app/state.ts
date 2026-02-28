@@ -9,6 +9,7 @@ export interface AppState {
   mode: AppMode;
   labels: GmailLabel[];
   labelDisplayItems: string[];
+  labelCursor: number;
   currentLabelId: string;
   currentLabelName: string;
   messages: GmailMessageHeader[];
@@ -30,6 +31,7 @@ export class GmailStateMachine {
       mode: "BOOT",
       labels: [],
       labelDisplayItems: [],
+      labelCursor: 0,
       currentLabelId: "",
       currentLabelName: "",
       messages: [],
@@ -105,22 +107,64 @@ export class GmailStateMachine {
     }));
 
     this.state.labels = [...friendlySystemLabels, ...userLabels];
+    this.state.labelCursor = 0;
     this.state.labelDisplayItems = this.state.labels.map((l) => {
+      const maxLen = TEXT_LAYOUT.CHARS_PER_LINE - 2; // reserve 2 for cursor
       const unread = l.messagesUnread && l.messagesUnread > 0
         ? ` (${l.messagesUnread})`
         : "";
       const display = `${l.name}${unread}`;
-      return display.length > TEXT_LAYOUT.CHARS_PER_LINE
-        ? display.slice(0, TEXT_LAYOUT.CHARS_PER_LINE - 3) + "..."
+      return display.length > maxLen
+        ? display.slice(0, maxLen - 3) + "..."
         : display;
     });
   }
 
   /**
-   * Get the label at a display index (used when firmware reports a list tap).
+   * Move label cursor. Returns true if cursor moved.
+   */
+  moveLabelCursor(delta: number): boolean {
+    const next = this.state.labelCursor + delta;
+    if (next < 0 || next >= this.state.labels.length) return false;
+    this.state.labelCursor = next;
+    return true;
+  }
+
+  /**
+   * Get the label at the current cursor position.
+   */
+  getLabelAtCursor(): GmailLabel | null {
+    return this.state.labels[this.state.labelCursor] ?? null;
+  }
+
+  /**
+   * Get the label at a display index.
    */
   getLabelAtIndex(displayIndex: number): GmailLabel | null {
     return this.state.labels[displayIndex] ?? null;
+  }
+
+  /**
+   * Get label list rendered as text with cursor marker.
+   */
+  getLabelListText(): string {
+    const items = this.state.labelDisplayItems;
+    const cursor = this.state.labelCursor;
+    const perPage = TEXT_LAYOUT.LINES_PER_PAGE;
+
+    const page = Math.floor(cursor / perPage);
+    const start = page * perPage;
+    const end = Math.min(start + perPage, items.length);
+
+    const lines: string[] = [];
+    for (let i = start; i < end; i++) {
+      const marker = i === cursor ? "> " : "  ";
+      lines.push(`${marker}${items[i]}`);
+    }
+    while (lines.length < perPage) {
+      lines.push("");
+    }
+    return lines.join("\n");
   }
 
   getLabelDisplayItems(): string[] {

@@ -135,22 +135,24 @@ export class Controller {
   // --- Labels mode ---
 
   private async handleLabels(gesture: GestureEvent): Promise<void> {
-    // List scroll is handled by firmware
-    if (gesture.kind === "SCROLL_FWD" || gesture.kind === "SCROLL_BACK") {
+    if (gesture.kind === "SCROLL_FWD") {
+      if (this.state.moveLabelCursor(1)) {
+        await this.renderLabelListUpdate();
+      }
+      return;
+    }
+
+    if (gesture.kind === "SCROLL_BACK") {
+      if (this.state.moveLabelCursor(-1)) {
+        await this.renderLabelListUpdate();
+      }
       return;
     }
 
     if (gesture.kind === "TAP") {
-      await this.handleLabelTap(gesture.listIndex);
+      const label = this.state.getLabelAtCursor();
+      if (label) await this.loadMessages(label.id, label.name);
     }
-  }
-
-  private async handleLabelTap(listIndex?: number): Promise<void> {
-    const idx = listIndex ?? 0;
-    const label = this.state.getLabelAtIndex(idx);
-    if (!label) return;
-
-    await this.loadMessages(label.id, label.name);
   }
 
   private async loadMessages(labelId: string, labelName: string): Promise<void> {
@@ -316,10 +318,18 @@ export class Controller {
 
   // --- Rendering ---
 
+  private labelListStatus(): string {
+    return `${this.state.snapshot.labels.length} labels`;
+  }
+
   private async renderLabels(): Promise<void> {
-    const items = this.state.getLabelDisplayItems();
-    const count = this.state.snapshot.labels.length;
-    await this.glass.showLabels(items, `${count} labels`);
+    const text = this.state.getLabelListText();
+    await this.glass.showLabels([text], this.labelListStatus());
+  }
+
+  private async renderLabelListUpdate(): Promise<void> {
+    const text = this.state.getLabelListText();
+    await this.glass.updateLabelListText(text, this.labelListStatus());
   }
 
   private messageListStatus(): string {

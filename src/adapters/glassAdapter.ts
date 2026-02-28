@@ -1,8 +1,6 @@
 import {
   CreateStartUpPageContainer,
   EvenAppBridge,
-  ListContainerProperty,
-  ListItemContainerProperty,
   OsEventTypeList,
   RebuildPageContainer,
   StartUpPageCreateResult,
@@ -55,32 +53,64 @@ export class GlassAdapterImpl implements GlassAdapter {
   }
 
   /**
-   * Show the label list on glasses.
-   * Always rebuilds because list items can't be updated in-place.
+   * Show the label list on glasses as a text container with cursor.
    */
   async showLabels(items: string[], statusText: string): Promise<void> {
-    const listContainer = new ListContainerProperty({
+    const textContent = items.join("\n");
+    const labelContainer = new TextContainerProperty({
       xPosition: GLASS_LAYOUT.x,
       yPosition: GLASS_LAYOUT.y,
       width: GLASS_LAYOUT.width,
       height: GLASS_LAYOUT.height,
       containerID: CONTAINER_IDS.content,
       containerName: CONTAINER_NAMES.content,
-      isEventCapture: 1,
-      itemContainer: new ListItemContainerProperty({
-        itemCount: items.length,
-        itemName: items,
-        isItemSelectBorderEn: 1,
-      }),
+      isEventCapture: 0,
+      content: textContent.slice(0, 1000),
     });
 
     const statusContainer = this.makeStatusContainer(statusText);
+    const eventContainer = new TextContainerProperty({
+      xPosition: 0,
+      yPosition: 0,
+      width: 1,
+      height: 1,
+      containerID: CONTAINER_IDS.statusRight,
+      containerName: CONTAINER_NAMES.statusRight,
+      isEventCapture: 1,
+      content: "",
+    });
 
     await this.renderContainers({
-      listObject: [listContainer],
-      textObject: [statusContainer],
+      textObject: [labelContainer, statusContainer, eventContainer],
     });
     this.currentMode = "labels";
+  }
+
+  /**
+   * Fast in-place update of label list text (cursor movement).
+   */
+  async updateLabelListText(text: string, statusText: string): Promise<void> {
+    if (!this.bridge) throw new Error("Not connected");
+
+    await this.bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: CONTAINER_IDS.content,
+        containerName: CONTAINER_NAMES.content,
+        contentOffset: 0,
+        contentLength: text.length,
+        content: text.slice(0, 2000),
+      }),
+    );
+
+    await this.bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: CONTAINER_IDS.status,
+        containerName: CONTAINER_NAMES.status,
+        contentOffset: 0,
+        contentLength: statusText.length,
+        content: statusText.slice(0, 2000),
+      }),
+    );
   }
 
   /**
@@ -295,20 +325,17 @@ export class GlassAdapterImpl implements GlassAdapter {
   }
 
   private async renderContainers(payload: {
-    listObject?: ListContainerProperty[];
-    textObject?: TextContainerProperty[];
+    textObject: TextContainerProperty[];
   }): Promise<void> {
     if (!this.bridge) {
       throw new Error("Not connected. Call connect() first.");
     }
 
-    const containerTotalNum =
-      (payload.listObject?.length ?? 0) + (payload.textObject?.length ?? 0);
+    const containerTotalNum = payload.textObject.length;
 
     const config = {
       containerTotalNum,
-      ...(payload.listObject ? { listObject: payload.listObject } : {}),
-      ...(payload.textObject ? { textObject: payload.textObject } : {}),
+      textObject: payload.textObject,
     };
 
     if (!this.startupDone) {
