@@ -178,7 +178,10 @@ export class Controller {
         result.messages,
         result.nextPageToken,
       );
-      await this.renderMessageList();
+
+      // Small delay to let firmware settle after progress message rebuilds
+      await new Promise((r) => setTimeout(r, 400));
+      await this.renderMessageListWithTimeout();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[controller] Failed to load messages:", msg);
@@ -292,6 +295,26 @@ export class Controller {
     const count = items.length;
     const status = `${labelName} (${count})`;
     await this.glass.showMessageList(items, status);
+  }
+
+  /**
+   * Render message list with a timeout. If rebuildPageContainer hangs
+   * (firmware issue with large lists), show error after 10s.
+   */
+  private async renderMessageListWithTimeout(): Promise<void> {
+    const items = this.state.getMessageDisplayItems();
+    const labelName = this.state.snapshot.currentLabelName;
+    const count = items.length;
+    const status = `${labelName} (${count})`;
+
+    await Promise.race([
+      this.glass.showMessageList(items, status),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          `List render hung (${count} items, ${items.join("").length} chars total)`
+        )), 10_000),
+      ),
+    ]);
   }
 
   private async renderReaderFull(): Promise<void> {

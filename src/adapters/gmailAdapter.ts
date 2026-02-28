@@ -137,7 +137,7 @@ export class GmailAdapterImpl implements GmailAdapter {
     await onProgress?.(`Got ${ids.length} IDs. Batch fetching...`);
     console.log(`[gmail] listMessages: batch-fetching headers for ${ids.length} messages`);
     const headers = await this.batchFetchMessageHeaders(ids);
-    await onProgress?.(`Parsed ${headers.length} messages.`);
+    console.log(`[gmail] batch: parsed ${headers.length} messages`);
 
     return {
       messages: headers.filter((h): h is GmailMessageHeader => h !== null),
