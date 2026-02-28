@@ -74,5 +74,5 @@ async function bootstrap(): Promise<void> {
 
 void bootstrap().catch((error: unknown) => {
   setPhoneState("error", "Failed to start", String(error));
-  console.error("G2 Gmail failed to start", error);
+  console.error("G2-mail failed to start", error);
 });

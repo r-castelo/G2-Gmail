@@ -212,7 +212,7 @@ function AuthenticatedView({
     <div className="er-status-view">
       <Card>
         <CardHeader>
-          <Text as="h1" variant="title-lg">G2 Gmail</Text>
+          <Text as="h1" variant="title-lg">G2-mail</Text>
           <Text as="p" variant="subtitle" className="er-muted-text">
             Gmail reader for Even Realities G2
           </Text>

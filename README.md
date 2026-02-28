@@ -1,4 +1,4 @@
-# G2 Gmail
+# G2-mail
 
 Gmail reader for [Even Realities G2](https://www.evenrealities.com/) smart glasses.
 
@@ -29,11 +29,11 @@ npm install
 6. Under **Authorized redirect URIs**, add:
    - `http://localhost:5173/` (for local development)
    - `https://<your-github-username>.github.io/G2-Gmail/` (if deploying to GitHub Pages)
-7. Copy the **Client ID** and **Client Secret**
+7. Copy the **Client ID**
 
 ### 3. Configure your `.env` file
 
-Copy the example file and fill in your credentials:
+Copy the example file and fill in your client ID:
 
 ```bash
 cp .env.example .env
@@ -43,10 +43,9 @@ Then edit `.env`:
 
 ```
 VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-VITE_GOOGLE_CLIENT_SECRET=your-client-secret
 ```
 
-> **Important:** The `.env` file is git-ignored and will never be committed. Never share your client secret publicly.
+> **Note:** The `.env` file is git-ignored and will never be committed. No client secret is needed — the app uses PKCE for public-client OAuth.
 
 ## Development
 
@@ -99,12 +98,23 @@ src/
   main.ts       # App entry point
 ```
 
+## Deployment (GitHub Pages)
+
+The repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that builds and deploys to GitHub Pages on every push to `main`.
+
+**One-time setup:**
+
+1. Go to your GitHub repo → **Settings → Secrets and variables → Actions**
+2. Add a repository secret: `VITE_GOOGLE_CLIENT_ID` = your client ID
+3. Go to **Settings → Pages → Source** and select **GitHub Actions**
+4. Push to `main` — the workflow builds and deploys automatically
+
 ## Security notes
 
-- OAuth credentials are loaded from environment variables at build time (`VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_SECRET`)
+- The client ID is loaded from the `VITE_GOOGLE_CLIENT_ID` environment variable at build time
+- No client secret is used — the app is a public OAuth client secured with PKCE (S256)
 - The `.env` file is excluded from version control via `.gitignore`
 - Only `.env.example` (with placeholder values) is committed
-- The app uses the OAuth 2.0 authorization code flow with PKCE
 - Refresh tokens are stored in the browser's `localStorage`; access tokens are kept in memory only
 - The requested scope is `gmail.modify` (read + mark as read)
 
