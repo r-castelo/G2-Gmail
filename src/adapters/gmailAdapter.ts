@@ -274,7 +274,7 @@ export class GmailAdapterImpl implements GmailAdapter {
           if (!retryResponse.ok) {
             throw new Error(`Gmail batch API error: ${retryResponse.status}`);
           }
-          return this.parseBatchResponse(await retryResponse.text(), retryResponse.headers.get("Content-Type") ?? "");
+          return this.parseBatchResponse(await retryResponse.text(), retryResponse.headers.get("Content-Type") ?? "", ids.length);
         } finally {
           clearTimeout(retryTimeout);
         }
@@ -284,7 +284,10 @@ export class GmailAdapterImpl implements GmailAdapter {
         throw new Error(`Gmail batch API error: ${response.status}`);
       }
 
-      return this.parseBatchResponse(await response.text(), response.headers.get("Content-Type") ?? "");
+      const contentType = response.headers.get("Content-Type") ?? "";
+      const responseText = await response.text();
+      console.log(`[gmail] batch response: status=${response.status}, contentType=${contentType}, bodyLen=${responseText.length}`);
+      return this.parseBatchResponse(responseText, contentType, ids.length);
     } finally {
       clearTimeout(timeout);
     }
@@ -292,45 +295,66 @@ export class GmailAdapterImpl implements GmailAdapter {
 
   /**
    * Parse a multipart/mixed batch response into GmailMessageHeader[].
+   * Throws if parsing yields 0 results from a non-empty request.
    */
   private parseBatchResponse(
     responseText: string,
     contentType: string,
+    expectedCount: number,
   ): GmailMessageHeader[] {
     // Extract boundary from Content-Type header
     const boundaryMatch = /boundary=([^\s;]+)/.exec(contentType);
     if (!boundaryMatch) {
-      console.warn("[gmail] batch: no boundary in Content-Type:", contentType);
-      return [];
+      throw new Error(`Batch parse: no boundary in Content-Type: ${contentType.slice(0, 100)}`);
     }
     const boundary = boundaryMatch[1];
 
     // Split by boundary and drop first (preamble) and last (epilogue) parts
     const rawParts = responseText.split(`--${boundary}`);
     const results: GmailMessageHeader[] = [];
+    let partsProcessed = 0;
+    let parseErrors = 0;
 
     for (const rawPart of rawParts) {
       const trimmed = rawPart.trim();
       if (!trimmed || trimmed === "--") continue;
+      partsProcessed++;
 
       // Each part has: MIME headers, blank line, HTTP response line, HTTP headers, blank line, JSON body
       // Find the JSON body: look for the first '{' that starts a line
       const jsonStart = trimmed.indexOf("\r\n{");
       const jsonStartAlt = trimmed.indexOf("\n{");
       const idx = jsonStart >= 0 ? jsonStart + 2 : jsonStartAlt >= 0 ? jsonStartAlt + 1 : -1;
-      if (idx < 0) continue;
+      if (idx < 0) {
+        parseErrors++;
+        console.warn(`[gmail] batch part ${partsProcessed}: no JSON found. Preview: ${trimmed.slice(0, 200)}`);
+        continue;
+      }
 
       // Find end of JSON — it should end with }
       const jsonEnd = trimmed.lastIndexOf("}");
-      if (jsonEnd < idx) continue;
+      if (jsonEnd < idx) {
+        parseErrors++;
+        console.warn(`[gmail] batch part ${partsProcessed}: malformed JSON bounds`);
+        continue;
+      }
 
       try {
         const data: GmailMessageResource = JSON.parse(trimmed.slice(idx, jsonEnd + 1));
         const header = this.messageResourceToHeader(data);
         if (header) results.push(header);
       } catch (err) {
-        console.warn("[gmail] batch: failed to parse part JSON:", err);
+        parseErrors++;
+        console.warn(`[gmail] batch part ${partsProcessed}: JSON parse failed:`, err);
       }
+    }
+
+    console.log(`[gmail] batch parsed: ${results.length} ok, ${parseErrors} errors, ${partsProcessed} parts from ${expectedCount} expected`);
+
+    if (results.length === 0 && expectedCount > 0) {
+      throw new Error(
+        `Batch parse: 0/${expectedCount} messages parsed (${partsProcessed} parts, ${parseErrors} errors). Body preview: ${responseText.slice(0, 300)}`,
+      );
     }
 
     return results;

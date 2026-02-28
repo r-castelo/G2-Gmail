@@ -82,9 +82,10 @@ export class Controller {
       this.state.setLabels(labels);
       await this.renderLabels();
     } catch (err: unknown) {
-      console.error("[controller] Failed to load labels:", err);
-      this.state.setError(APP_TEXT.errorGeneric);
-      await this.glass.showMessage(`${APP_TEXT.errorGeneric}\n${APP_TEXT.tapToRetry}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[controller] Failed to load labels:", msg);
+      this.state.setError(msg);
+      await this.glass.showMessage(`Labels error:\n${msg.slice(0, 200)}\n\nTap to retry`);
     }
   }
 
@@ -240,9 +241,10 @@ export class Controller {
       await this.renderReaderFull();
       await this.wakeLock?.acquire();
     } catch (err: unknown) {
-      console.error("[controller] Failed to open message:", err);
-      // Go back to message list
-      await this.renderMessageList();
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[controller] Failed to open message:", msg);
+      this.state.setError(msg);
+      await this.glass.showMessage(`Read error:\n${msg.slice(0, 200)}\n\nTap to retry`);
     }
   }
 
