@@ -20,6 +20,7 @@ import "./phoneUI.css";
 
 export interface PhoneUIOptions {
   onSignIn: () => Promise<void>;
+  onSignInRelay: () => void;
   onSignOut: () => void;
   onImportToken: (token: string) => void;
   isAuthenticated: () => boolean;
@@ -83,6 +84,7 @@ interface PhoneUISnapshot {
 
 export class PhoneUI {
   private readonly onSignIn: () => Promise<void>;
+  private readonly onSignInRelay: () => void;
   private readonly onSignOut: () => void;
   private readonly onImportTokenFn: (token: string) => void;
   private readonly isAuthenticatedFn: () => boolean;
@@ -99,6 +101,7 @@ export class PhoneUI {
 
   constructor(options: PhoneUIOptions) {
     this.onSignIn = options.onSignIn;
+    this.onSignInRelay = options.onSignInRelay;
     this.onSignOut = options.onSignOut;
     this.onImportTokenFn = options.onImportToken;
     this.isAuthenticatedFn = options.isAuthenticated;
@@ -161,6 +164,10 @@ export class PhoneUI {
         setPhoneState("error", "Sign in failed", msg);
       }
     }
+  }
+
+  handleSignInRelay(): void {
+    this.onSignInRelay();
   }
 
   handleSignOut(): void {
@@ -234,6 +241,9 @@ function PhoneUIApp({ ui }: PhoneUIAppProps): JSX.Element {
           onSignIn={() => {
             void ui.handleSignIn();
           }}
+          onSignInRelay={() => {
+            ui.handleSignInRelay();
+          }}
           onSignOut={() => {
             ui.handleSignOut();
           }}
@@ -248,12 +258,14 @@ function PhoneUIApp({ ui }: PhoneUIAppProps): JSX.Element {
 interface AuthenticatedViewProps {
   snapshot: PhoneUISnapshot;
   onSignIn: () => void;
+  onSignInRelay: () => void;
   onSignOut: () => void;
 }
 
 function AuthenticatedView({
   snapshot,
   onSignIn,
+  onSignInRelay,
   onSignOut,
 }: AuthenticatedViewProps): JSX.Element {
   return (
@@ -268,10 +280,15 @@ function AuthenticatedView({
 
         <CardContent className="er-auth-content">
           {!snapshot.isAuthenticated && (
-            <Button variant="accent" size="lg" onClick={onSignIn}>
-              <LoginIcon size={16} />
-              Sign in with Google
-            </Button>
+            <>
+              <Button variant="accent" size="lg" onClick={onSignIn}>
+                <LoginIcon size={16} />
+                Sign in with Google
+              </Button>
+              <Button variant="default" size="sm" onClick={onSignInRelay}>
+                Sign in via browser
+              </Button>
+            </>
           )}
 
           {snapshot.isAuthenticated && (

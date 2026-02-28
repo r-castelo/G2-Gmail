@@ -41,6 +41,7 @@ async function bootstrap(): Promise<void> {
     const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken) ?? "";
     const phoneUI = new PhoneUI({
       onSignIn: async () => {},
+      onSignInRelay: () => {},
       onSignOut: () => {},
       onImportToken: () => {},
       isAuthenticated: () => false,
@@ -58,13 +59,12 @@ async function bootstrap(): Promise<void> {
   // --- Initialize phone UI immediately ---
   const phoneUI = new PhoneUI({
     onSignIn: async () => {
-      const mode = await auth.startAuth();
-      if (mode === "relay") {
-        // WebView: show URL to copy + token paste screen
-        const relayUrl = `${GMAIL_CONFIG.REDIRECT_URI}?startauth=1`;
-        phoneUI.showTokenPasteScreen(relayUrl);
-      }
-      // mode === "redirect": page navigates away
+      await auth.startAuth();
+      // startAuth() redirects — we only reach here if something failed
+    },
+    onSignInRelay: () => {
+      const relayUrl = `${GMAIL_CONFIG.REDIRECT_URI}?startauth=1`;
+      phoneUI.showTokenPasteScreen(relayUrl);
     },
     onSignOut: () => {
       auth.signOut();
