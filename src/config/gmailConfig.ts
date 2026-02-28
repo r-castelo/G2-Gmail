@@ -6,12 +6,20 @@
  * 2. Enable the Gmail API
  * 3. Create an OAuth 2.0 Client ID (type: Web application)
  * 4. Add the redirect URI below to authorized redirect URIs
- * 5. Set VITE_GOOGLE_CLIENT_ID in your .env file (see .env.example)
+ * 5. Set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_CLIENT_SECRET in your .env file (see .env.example)
  */
 
 export const GMAIL_CONFIG = {
   /** Read from VITE_GOOGLE_CLIENT_ID environment variable (.env file). */
   CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "",
+
+  /**
+   * Read from VITE_GOOGLE_CLIENT_SECRET environment variable (.env file).
+   * For web-application OAuth clients Google requires the secret for token
+   * exchange.  It is NOT truly secret — Google relies on redirect-URI
+   * validation and PKCE for security, not the client secret.
+   */
+  CLIENT_SECRET: import.meta.env.VITE_GOOGLE_CLIENT_SECRET ?? "",
 
   /** Must exactly match the authorized redirect URI in Google Cloud Console. */
   REDIRECT_URI: import.meta.env.DEV

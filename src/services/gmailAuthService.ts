@@ -136,6 +136,7 @@ export class GmailAuthService {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: GMAIL_CONFIG.CLIENT_ID,
+        client_secret: GMAIL_CONFIG.CLIENT_SECRET,
         code,
         code_verifier: codeVerifier,
         grant_type: "authorization_code",
@@ -171,6 +172,7 @@ export class GmailAuthService {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: GMAIL_CONFIG.CLIENT_ID,
+        client_secret: GMAIL_CONFIG.CLIENT_SECRET,
         refresh_token: refreshToken,
         grant_type: "refresh_token",
       }),

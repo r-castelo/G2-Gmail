@@ -29,11 +29,11 @@ npm install
 6. Under **Authorized redirect URIs**, add:
    - `http://localhost:5173/` (for local development)
    - `https://<your-github-username>.github.io/G2-Gmail/` (if deploying to GitHub Pages)
-7. Copy the **Client ID**
+7. Copy the **Client ID** and **Client Secret**
 
 ### 3. Configure your `.env` file
 
-Copy the example file and fill in your client ID:
+Copy the example file and fill in your credentials:
 
 ```bash
 cp .env.example .env
@@ -43,9 +43,10 @@ Then edit `.env`:
 
 ```
 VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_SECRET=your-client-secret
 ```
 
-> **Note:** The `.env` file is git-ignored and will never be committed. No client secret is needed — the app uses PKCE for public-client OAuth.
+> **Note:** The `.env` file is git-ignored and will never be committed.
 
 ## Development
 
@@ -105,14 +106,14 @@ The repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) tha
 **One-time setup:**
 
 1. Go to your GitHub repo → **Settings → Secrets and variables → Actions**
-2. Add a repository secret: `VITE_GOOGLE_CLIENT_ID` = your client ID
+2. Add repository secrets: `VITE_GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_SECRET`
 3. Go to **Settings → Pages → Source** and select **GitHub Actions**
 4. Push to `main` — the workflow builds and deploys automatically
 
 ## Security notes
 
-- The client ID is loaded from the `VITE_GOOGLE_CLIENT_ID` environment variable at build time
-- No client secret is used — the app is a public OAuth client secured with PKCE (S256)
+- OAuth credentials are loaded from `VITE_GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_SECRET` environment variables at build time
+- The client secret for Google "Web application" OAuth clients is not truly secret — Google relies on redirect-URI validation and PKCE for security
 - The `.env` file is excluded from version control via `.gitignore`
 - Only `.env.example` (with placeholder values) is committed
 - Refresh tokens are stored in the browser's `localStorage`; access tokens are kept in memory only
