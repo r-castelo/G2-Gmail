@@ -64,46 +64,6 @@ body {
   justify-content: space-between;
 }
 
-/* ── Label list ─────────────────────────────────────────────── */
-.er-label-list {
-  display: grid;
-  gap: var(--layout-section-gap);
-}
-
-.er-label-entry {
-  justify-content: flex-start;
-  width: 100%;
-  min-height: var(--space-32);
-  padding-inline: var(--space-12);
-}
-
-.er-label-icon {
-  width: var(--space-20);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-tc-2);
-}
-
-.er-label-text {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  text-align: left;
-}
-
-.er-label-text .text-app-body-2 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Selected label highlight ──────────────────────────────── */
-.er-label-entry.er-label-selected {
-  background: var(--color-bc-accent-pressed);
-  color: var(--color-tc-on-accent);
-}
-
 /* ── Muted / secondary text ─────────────────────────────────── */
 .er-muted-text {
   color: var(--color-tc-2);

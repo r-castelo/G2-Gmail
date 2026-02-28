@@ -59,11 +59,6 @@ export class Controller {
     await this.loadLabels();
   }
 
-  /** Navigate glasses to a specific label's message list (called from phone UI). */
-  async selectLabel(labelId: string, labelName: string): Promise<void> {
-    await this.loadMessages(labelId, labelName);
-  }
-
   get currentMode() {
     return this.state.mode;
   }

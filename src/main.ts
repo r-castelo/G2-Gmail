@@ -35,19 +35,14 @@ async function bootstrap(): Promise<void> {
       auth.signOut();
       window.location.reload();
     },
-    onLabelSelect: (label) => {
-      phoneUI.setSelectedLabel(label.id);
-      void controller.selectLabel(label.id, label.name);
-    },
     isAuthenticated: () => auth.isAuthenticated(),
     getEmail: async () => gmail.getProfile(),
   });
 
-  // If authenticated, show labels on phone immediately
+  // If authenticated, show authenticated state on phone
   if (wasOAuthRedirect || auth.isAuthenticated()) {
     try {
-      const labels = await gmail.listLabels();
-      await phoneUI.showAuthenticated(labels);
+      await phoneUI.showAuthenticated();
       setPhoneState("connected", "Signed in — connecting glasses...");
     } catch (err: unknown) {
       console.error("[main] Post-auth setup failed:", err);
