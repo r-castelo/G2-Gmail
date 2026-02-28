@@ -350,11 +350,11 @@ export class GlassAdapterImpl implements GlassAdapter {
       event.sysEvent?.eventType;
 
     if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
-      return { kind: "SCROLL_FWD" };
+      return { kind: "SCROLL_BACK" };
     }
 
     if (eventType === OsEventTypeList.SCROLL_TOP_EVENT) {
-      return { kind: "SCROLL_BACK" };
+      return { kind: "SCROLL_FWD" };
     }
 
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
