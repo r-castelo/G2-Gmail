@@ -18,7 +18,7 @@ async function bootstrap(): Promise<void> {
   // --- Relay auth: system browser was opened with ?startauth=1 ---
   const startUrl = new URL(window.location.href);
   if (startUrl.searchParams.has("startauth")) {
-    sessionStorage.setItem(RELAY_AUTH_KEY, "1");
+    localStorage.setItem(RELAY_AUTH_KEY, "1");
     startUrl.searchParams.delete("startauth");
     window.history.replaceState({}, "", startUrl.pathname + startUrl.hash);
     await auth.startAuth(); // Normal redirect (we're in a real browser now)
@@ -36,8 +36,8 @@ async function bootstrap(): Promise<void> {
   }
 
   // --- Relay auth completion: show token for user to copy back to WebView ---
-  if (wasOAuthRedirect && sessionStorage.getItem(RELAY_AUTH_KEY)) {
-    sessionStorage.removeItem(RELAY_AUTH_KEY);
+  if (wasOAuthRedirect && localStorage.getItem(RELAY_AUTH_KEY)) {
+    localStorage.removeItem(RELAY_AUTH_KEY);
     const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken) ?? "";
     const phoneUI = new PhoneUI({
       onSignIn: async () => {},
