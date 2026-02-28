@@ -120,18 +120,22 @@ export class GmailAdapterImpl implements GmailAdapter {
     });
     if (pageToken) params.set("pageToken", pageToken);
 
+    console.log(`[gmail] listMessages: fetching IDs for ${labelId}`);
     const listData = await this.apiFetch<GmailMessagesListResponse>(
       `/users/me/messages?${params.toString()}`,
     );
 
     if (!listData.messages || listData.messages.length === 0) {
+      console.log("[gmail] listMessages: no messages found");
       return { messages: [] };
     }
 
     // Step 2: Fetch metadata for each message (sequential to avoid flooding)
-    const ids = listData.messages.filter((m) => m.id).map((m) => m.id!);
+    const ids = listData.messages.map((m) => m.id).filter((id): id is string => !!id);
+    console.log(`[gmail] listMessages: fetching headers for ${ids.length} messages`);
     const headers: (GmailMessageHeader | null)[] = [];
     for (const id of ids) {
+      console.log(`[gmail] fetching header ${headers.length + 1}/${ids.length}`);
       headers.push(await this.fetchMessageHeader(id));
     }
 
@@ -329,6 +333,7 @@ export class GmailAdapterImpl implements GmailAdapter {
    * Auto-retries once with a forced token refresh on 401.
    */
   private async apiFetch<T>(path: string, init?: RequestInit, retry = true): Promise<T> {
+    console.log(`[gmail] apiFetch: ${path.slice(0, 60)}`);
     const token = await this.auth.getAccessToken();
     const url = path.startsWith("http")
       ? path

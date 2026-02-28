@@ -154,13 +154,15 @@ export class Controller {
 
   private async loadMessages(labelId: string, labelName: string): Promise<void> {
     try {
-      await this.glass.showMessage(APP_TEXT.loadingMessages);
+      await this.glass.showMessage(`Loading ${labelName}...`);
+      console.log(`[controller] loadMessages: labelId=${labelId}`);
+
       const result = await this.gmail.listMessages(labelId, MESSAGES_PER_PAGE);
+      console.log(`[controller] got ${result.messages.length} messages`);
 
       if (result.messages.length === 0) {
         this.state.setMessages(labelId, labelName, [], undefined);
         await this.glass.showMessage(APP_TEXT.emptyLabel);
-        // Still set mode to MESSAGE_LIST so DOUBLE_TAP goes back to labels
         return;
       }
 
@@ -172,9 +174,10 @@ export class Controller {
       );
       await this.renderMessageList();
     } catch (err: unknown) {
-      console.error("[controller] Failed to load messages:", err);
-      this.state.setError(APP_TEXT.errorGeneric);
-      await this.glass.showMessage(`${APP_TEXT.errorGeneric}\n${APP_TEXT.tapToRetry}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[controller] Failed to load messages:", msg);
+      this.state.setError(msg);
+      await this.glass.showMessage(`Error: ${msg}\n\nTap to retry`);
     }
   }
 
