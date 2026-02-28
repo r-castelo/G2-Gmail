@@ -75,6 +75,7 @@ interface PhoneUISnapshot {
   isAuthenticated: boolean;
   email: string;
   viewMode: ViewMode;
+  relayUrl: string;
   relayToken: string;
 }
 
@@ -92,6 +93,7 @@ export class PhoneUI {
 
   private email = "";
   private viewMode: ViewMode = "normal";
+  private relayUrl = "";
   private relayToken = "";
   private cachedSnapshot!: PhoneUISnapshot;
 
@@ -134,6 +136,7 @@ export class PhoneUI {
       isAuthenticated: this.isAuthenticatedFn(),
       email: this.email,
       viewMode: this.viewMode,
+      relayUrl: this.relayUrl,
       relayToken: this.relayToken,
     };
   }
@@ -174,7 +177,8 @@ export class PhoneUI {
   }
 
   /** Show the "paste token" screen (WebView side of relay flow). */
-  showTokenPasteScreen(): void {
+  showTokenPasteScreen(url: string): void {
+    this.relayUrl = url;
     this.viewMode = "token-paste";
     this.emit();
   }
@@ -215,6 +219,7 @@ function PhoneUIApp({ ui }: PhoneUIAppProps): JSX.Element {
     <div className="er-phone-app">
       {snapshot.viewMode === "token-paste" && (
         <TokenPasteView
+          url={snapshot.relayUrl}
           onSubmit={(token) => {
             ui.handleImportToken(token);
           }}
@@ -294,11 +299,17 @@ function AuthenticatedView({
 // ── Token paste view (WebView side of relay auth) ─────────────
 
 interface TokenPasteViewProps {
+  url: string;
   onSubmit: (token: string) => void;
 }
 
-function TokenPasteView({ onSubmit }: TokenPasteViewProps): JSX.Element {
+function TokenPasteView({ url, onSubmit }: TokenPasteViewProps): JSX.Element {
+  const [urlCopied, setUrlCopied] = useState(false);
   const [token, setToken] = useState("");
+
+  const handleCopyUrl = () => {
+    void navigator.clipboard.writeText(url).then(() => setUrlCopied(true));
+  };
 
   return (
     <div className="er-status-view">
@@ -306,13 +317,26 @@ function TokenPasteView({ onSubmit }: TokenPasteViewProps): JSX.Element {
         <CardHeader>
           <Text as="h1" variant="title-lg">G2-mail</Text>
           <Text as="p" variant="subtitle" className="er-muted-text">
-            Paste sign-in token
+            Sign in via browser
           </Text>
         </CardHeader>
         <CardContent className="er-auth-content">
-          <Text as="p">
-            Complete sign-in in the browser that just opened,
-            then copy the token and paste it here.
+          <Text as="p" className="er-muted-text">
+            Step 1: Copy this URL and open it in your browser.
+          </Text>
+          <textarea
+            className="er-token-textarea"
+            readOnly
+            value={url}
+            rows={2}
+            onFocus={(e) => e.target.select()}
+          />
+          <Button variant="accent" size="lg" onClick={handleCopyUrl}>
+            {urlCopied ? "Copied!" : "Copy URL"}
+          </Button>
+
+          <Text as="p" className="er-muted-text">
+            Step 2: After signing in, copy the token from the browser and paste it here.
           </Text>
           <textarea
             className="er-token-textarea"
@@ -329,7 +353,7 @@ function TokenPasteView({ onSubmit }: TokenPasteViewProps): JSX.Element {
               if (trimmed) onSubmit(trimmed);
             }}
           >
-            Submit
+            Submit token
           </Button>
         </CardContent>
       </Card>

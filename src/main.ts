@@ -5,6 +5,7 @@ import { GmailAdapterImpl } from "./adapters/gmailAdapter";
 import { GmailAuthService } from "./services/gmailAuthService";
 import { WakeLockServiceImpl } from "./services/wakeLockService";
 import { PhoneUI, setPhoneState } from "./phone/phoneUI";
+import { GMAIL_CONFIG } from "./config/gmailConfig";
 import { STORAGE_KEYS } from "./config/constants";
 
 const RELAY_AUTH_KEY = "g2_gmail.relay_auth";
@@ -59,8 +60,9 @@ async function bootstrap(): Promise<void> {
     onSignIn: async () => {
       const mode = await auth.startAuth();
       if (mode === "relay") {
-        // WebView: browser opened externally, show paste screen
-        phoneUI.showTokenPasteScreen();
+        // WebView: show URL to copy + token paste screen
+        const relayUrl = `${GMAIL_CONFIG.REDIRECT_URI}?startauth=1`;
+        phoneUI.showTokenPasteScreen(relayUrl);
       }
       // mode === "redirect": page navigates away
     },

@@ -83,7 +83,6 @@ export class GmailAuthService {
    */
   async startAuth(): Promise<"redirect" | "relay"> {
     if (GmailAuthService.isWebView()) {
-      window.open(`${GMAIL_CONFIG.REDIRECT_URI}?startauth=1`, "_blank");
       return "relay";
     }
 
