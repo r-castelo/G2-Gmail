@@ -130,14 +130,10 @@ export class GmailAdapterImpl implements GmailAdapter {
       return { messages: [] };
     }
 
-    // Step 2: Fetch metadata for each message (sequential to avoid flooding)
+    // Step 2: Batch-fetch metadata for all messages in a single HTTP request
     const ids = listData.messages.map((m) => m.id).filter((id): id is string => !!id);
-    console.log(`[gmail] listMessages: fetching headers for ${ids.length} messages`);
-    const headers: (GmailMessageHeader | null)[] = [];
-    for (const id of ids) {
-      console.log(`[gmail] fetching header ${headers.length + 1}/${ids.length}`);
-      headers.push(await this.fetchMessageHeader(id));
-    }
+    console.log(`[gmail] listMessages: batch-fetching headers for ${ids.length} messages`);
+    const headers = await this.batchFetchMessageHeaders(ids);
 
     return {
       messages: headers.filter((h): h is GmailMessageHeader => h !== null),
@@ -221,6 +217,148 @@ export class GmailAdapterImpl implements GmailAdapter {
       console.warn(`[gmail] Failed to fetch message ${messageId}:`, err);
       return null;
     }
+  }
+
+  /**
+   * Batch-fetch metadata headers for multiple messages in a single HTTP request
+   * using the Gmail Batch API. This avoids sequential fetches that stall in WebView.
+   */
+  private async batchFetchMessageHeaders(
+    ids: string[],
+  ): Promise<GmailMessageHeader[]> {
+    if (ids.length === 0) return [];
+
+    const boundary = "batch_gmail_headers";
+    const parts = ids.map(
+      (id) =>
+        `--${boundary}\r\nContent-Type: application/http\r\nContent-ID: <msg-${id}>\r\n\r\nGET /gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date\r\n`,
+    );
+    const body = parts.join("\r\n") + `\r\n--${boundary}--`;
+
+    const token = await this.auth.getAccessToken();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
+    try {
+      const response = await fetch(
+        "https://www.googleapis.com/batch/gmail/v1",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": `multipart/mixed; boundary=${boundary}`,
+          },
+          body,
+          signal: controller.signal,
+        },
+      );
+
+      if (response.status === 401) {
+        console.log("[gmail] batch 401 — forcing token refresh");
+        const newToken = await this.auth.forceRefresh();
+        const retryController = new AbortController();
+        const retryTimeout = setTimeout(() => retryController.abort(), 30_000);
+        try {
+          const retryResponse = await fetch(
+            "https://www.googleapis.com/batch/gmail/v1",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${newToken}`,
+                "Content-Type": `multipart/mixed; boundary=${boundary}`,
+              },
+              body,
+              signal: retryController.signal,
+            },
+          );
+          if (!retryResponse.ok) {
+            throw new Error(`Gmail batch API error: ${retryResponse.status}`);
+          }
+          return this.parseBatchResponse(await retryResponse.text(), retryResponse.headers.get("Content-Type") ?? "");
+        } finally {
+          clearTimeout(retryTimeout);
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`Gmail batch API error: ${response.status}`);
+      }
+
+      return this.parseBatchResponse(await response.text(), response.headers.get("Content-Type") ?? "");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /**
+   * Parse a multipart/mixed batch response into GmailMessageHeader[].
+   */
+  private parseBatchResponse(
+    responseText: string,
+    contentType: string,
+  ): GmailMessageHeader[] {
+    // Extract boundary from Content-Type header
+    const boundaryMatch = /boundary=([^\s;]+)/.exec(contentType);
+    if (!boundaryMatch) {
+      console.warn("[gmail] batch: no boundary in Content-Type:", contentType);
+      return [];
+    }
+    const boundary = boundaryMatch[1];
+
+    // Split by boundary and drop first (preamble) and last (epilogue) parts
+    const rawParts = responseText.split(`--${boundary}`);
+    const results: GmailMessageHeader[] = [];
+
+    for (const rawPart of rawParts) {
+      const trimmed = rawPart.trim();
+      if (!trimmed || trimmed === "--") continue;
+
+      // Each part has: MIME headers, blank line, HTTP response line, HTTP headers, blank line, JSON body
+      // Find the JSON body: look for the first '{' that starts a line
+      const jsonStart = trimmed.indexOf("\r\n{");
+      const jsonStartAlt = trimmed.indexOf("\n{");
+      const idx = jsonStart >= 0 ? jsonStart + 2 : jsonStartAlt >= 0 ? jsonStartAlt + 1 : -1;
+      if (idx < 0) continue;
+
+      // Find end of JSON — it should end with }
+      const jsonEnd = trimmed.lastIndexOf("}");
+      if (jsonEnd < idx) continue;
+
+      try {
+        const data: GmailMessageResource = JSON.parse(trimmed.slice(idx, jsonEnd + 1));
+        const header = this.messageResourceToHeader(data);
+        if (header) results.push(header);
+      } catch (err) {
+        console.warn("[gmail] batch: failed to parse part JSON:", err);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Convert a GmailMessageResource (metadata format) to a GmailMessageHeader.
+   */
+  private messageResourceToHeader(
+    data: GmailMessageResource,
+  ): GmailMessageHeader | null {
+    if (!data.id) return null;
+
+    const headers = data.payload?.headers ?? [];
+    const getHeader = (name: string): string =>
+      headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
+
+    const isUnread = data.labelIds?.includes("UNREAD") ?? false;
+
+    return {
+      id: data.id,
+      threadId: data.threadId ?? "",
+      subject: getHeader("Subject") || "(no subject)",
+      from: this.extractSenderName(getHeader("From")),
+      date: this.formatDateShort(getHeader("Date")),
+      snippet: data.snippet ?? "",
+      isUnread,
+    };
   }
 
   /**
