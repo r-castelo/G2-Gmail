@@ -26,17 +26,19 @@ async function bootstrap(): Promise<void> {
   }
 
   // --- Gmail OAuth: handle redirect before anything else ---
+  const isRelayAuth = !!localStorage.getItem(RELAY_AUTH_KEY);
   let wasOAuthRedirect = false;
+  let oauthError: string | null = null;
   try {
     wasOAuthRedirect = await auth.handleRedirectIfPresent();
   } catch (err: unknown) {
     console.error("[main] OAuth redirect handling failed:", err);
-    setPhoneState("error", `Sign-in failed: ${String(err)}`);
-    // Continue — still create PhoneUI so user can retry
+    oauthError = String(err);
+    setPhoneState("error", `Sign-in failed: ${oauthError}`);
   }
 
-  // --- Relay auth completion: show token for user to copy back to WebView ---
-  if (wasOAuthRedirect && localStorage.getItem(RELAY_AUTH_KEY)) {
+  // --- Relay auth completion: show token (or error) for user to copy back ---
+  if (isRelayAuth && (wasOAuthRedirect || oauthError)) {
     localStorage.removeItem(RELAY_AUTH_KEY);
     const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken) ?? "";
     const phoneUI = new PhoneUI({
@@ -47,7 +49,11 @@ async function bootstrap(): Promise<void> {
       isAuthenticated: () => false,
       getEmail: async () => "",
     });
-    phoneUI.showRelayTokenScreen(refreshToken);
+    if (oauthError) {
+      phoneUI.showRelayTokenScreen(`ERROR: ${oauthError}`);
+    } else {
+      phoneUI.showRelayTokenScreen(refreshToken);
+    }
     return; // Don't start glasses controller — this is the system browser
   }
 
