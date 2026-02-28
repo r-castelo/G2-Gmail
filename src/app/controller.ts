@@ -158,7 +158,12 @@ export class Controller {
       await this.glass.showMessage(`Loading ${labelName}...`);
       console.log(`[controller] loadMessages: labelId=${labelId}`);
 
-      const result = await this.gmail.listMessages(labelId, MESSAGES_PER_PAGE);
+      const result = await this.gmail.listMessages(
+        labelId,
+        MESSAGES_PER_PAGE,
+        undefined,
+        (step) => this.glass.showMessage(`Loading ${labelName}...\n${step}`),
+      );
       console.log(`[controller] got ${result.messages.length} messages`);
 
       if (result.messages.length === 0) {

@@ -112,8 +112,10 @@ export class GmailAdapterImpl implements GmailAdapter {
     labelId: string,
     maxResults: number = MESSAGES_PER_PAGE,
     pageToken?: string,
+    onProgress?: (step: string) => Promise<void> | void,
   ): Promise<{ messages: GmailMessageHeader[]; nextPageToken?: string }> {
     // Step 1: List message IDs
+    await onProgress?.("Fetching message IDs...");
     const params = new URLSearchParams({
       labelIds: labelId,
       maxResults: String(maxResults),
@@ -132,8 +134,10 @@ export class GmailAdapterImpl implements GmailAdapter {
 
     // Step 2: Batch-fetch metadata for all messages in a single HTTP request
     const ids = listData.messages.map((m) => m.id).filter((id): id is string => !!id);
+    await onProgress?.(`Got ${ids.length} IDs. Batch fetching...`);
     console.log(`[gmail] listMessages: batch-fetching headers for ${ids.length} messages`);
     const headers = await this.batchFetchMessageHeaders(ids);
+    await onProgress?.(`Parsed ${headers.length} messages.`);
 
     return {
       messages: headers.filter((h): h is GmailMessageHeader => h !== null),
@@ -222,6 +226,7 @@ export class GmailAdapterImpl implements GmailAdapter {
   /**
    * Batch-fetch metadata headers for multiple messages in a single HTTP request
    * using the Gmail Batch API. This avoids sequential fetches that stall in WebView.
+   * Uses Promise.race for timeout since AbortController may not work in all WebViews.
    */
   private async batchFetchMessageHeaders(
     ids: string[],
@@ -236,61 +241,62 @@ export class GmailAdapterImpl implements GmailAdapter {
     const body = parts.join("\r\n") + `\r\n--${boundary}--`;
 
     const token = await this.auth.getAccessToken();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
 
-    try {
-      const response = await fetch(
+    const doFetch = async (authToken: string): Promise<GmailMessageHeader[]> => {
+      const response = await this.fetchWithTimeout(
         "https://www.googleapis.com/batch/gmail/v1",
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
             "Content-Type": `multipart/mixed; boundary=${boundary}`,
           },
           body,
-          signal: controller.signal,
         },
+        15_000,
+        "Batch fetch",
       );
 
-      if (response.status === 401) {
-        console.log("[gmail] batch 401 — forcing token refresh");
-        const newToken = await this.auth.forceRefresh();
-        const retryController = new AbortController();
-        const retryTimeout = setTimeout(() => retryController.abort(), 30_000);
-        try {
-          const retryResponse = await fetch(
-            "https://www.googleapis.com/batch/gmail/v1",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${newToken}`,
-                "Content-Type": `multipart/mixed; boundary=${boundary}`,
-              },
-              body,
-              signal: retryController.signal,
-            },
-          );
-          if (!retryResponse.ok) {
-            throw new Error(`Gmail batch API error: ${retryResponse.status}`);
-          }
-          return this.parseBatchResponse(await retryResponse.text(), retryResponse.headers.get("Content-Type") ?? "", ids.length);
-        } finally {
-          clearTimeout(retryTimeout);
-        }
-      }
-
       if (!response.ok) {
-        throw new Error(`Gmail batch API error: ${response.status}`);
+        throw new Error(`Batch API ${response.status}: ${(await response.text()).slice(0, 200)}`);
       }
 
       const contentType = response.headers.get("Content-Type") ?? "";
       const responseText = await response.text();
-      console.log(`[gmail] batch response: status=${response.status}, contentType=${contentType}, bodyLen=${responseText.length}`);
+      console.log(`[gmail] batch response: status=${response.status}, ct=${contentType.slice(0, 60)}, len=${responseText.length}`);
       return this.parseBatchResponse(responseText, contentType, ids.length);
-    } finally {
-      clearTimeout(timeout);
+    };
+
+    try {
+      return await doFetch(token);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Retry once on 401
+      if (msg.includes("Batch API 401")) {
+        console.log("[gmail] batch 401 — forcing token refresh");
+        const newToken = await this.auth.forceRefresh();
+        return await doFetch(newToken);
+      }
+      throw err;
     }
+  }
+
+  /**
+   * fetch() wrapped in Promise.race so it always rejects after timeoutMs,
+   * even if AbortController doesn't work in the current WebView.
+   */
+  private fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    label: string,
+  ): Promise<Response> {
+    return Promise.race([
+      fetch(url, init),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs / 1000}s`)), timeoutMs),
+      ),
+    ]);
   }
 
   /**
