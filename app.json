@@ -3,17 +3,23 @@
   "edition": "202601",
   "name": "G2-mail",
   "version": "0.1.0",
-  "min_app_version": "0.1.0",
+  "min_app_version": "2.0.0",
+  "min_sdk_version": "0.0.7",
   "tagline": "Read Gmail on G2 glasses",
   "description": "Browse Gmail labels, navigate email lists, and read emails as paginated plain text on Even Realities G2.",
   "author": "Renato Castelo Branco Camargo Pereira",
   "entrypoint": "index.html",
-  "permissions": {
-    "network": [
-      "evenhub.evenrealities.com",
-      "accounts.google.com",
-      "oauth2.googleapis.com",
-      "gmail.googleapis.com"
-    ]
-  }
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Sign in to Gmail and fetch labels, message lists, and email bodies for display on the glasses.",
+      "whitelist": [
+        "evenhub.evenrealities.com",
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "gmail.googleapis.com"
+      ]
+    }
+  ],
+  "supported_languages": ["en"]
 }
