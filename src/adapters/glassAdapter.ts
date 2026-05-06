@@ -69,8 +69,9 @@ export class GlassAdapterImpl implements GlassAdapter {
     if (!this.bridge) throw new Error("Bridge not ready");
 
     const initial = await this.bridge.getDeviceInfo().catch(() => null);
-    if (initial?.status?.isConnected()) {
-      console.log("[glass] device already connected:", initial.model, initial.sn);
+    // null means getDeviceInfo is unsupported (simulator) — skip the wait
+    if (initial === null || initial?.status?.isConnected()) {
+      if (initial) console.log("[glass] device already connected:", initial.model, initial.sn);
       return;
     }
 
