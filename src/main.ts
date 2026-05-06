@@ -72,13 +72,44 @@ async function bootstrap(): Promise<void> {
       const relayUrl = `${GMAIL_CONFIG.REDIRECT_URI}?startauth=1`;
       phoneUI.showTokenPasteScreen(relayUrl);
     },
-    onSignOut: () => {
+    onSignOut: async () => {
       auth.signOut();
-      window.location.reload();
+      try {
+        await phoneUI.showAuthenticated();
+      } catch {
+        // ignore — getEmail will fail when unauthenticated
+      }
+      setPhoneState("connected", "Signed out");
     },
-    onImportToken: (token: string) => {
+    onImportToken: async (token: string) => {
       auth.importRefreshToken(token);
-      window.location.reload();
+
+      // Verify the WebView actually persisted the token. Some hosts return a
+      // working localStorage object whose values evaporate on the next read,
+      // which is what causes the relay-auth loop the user reported.
+      if (localStorage.getItem(STORAGE_KEYS.refreshToken) !== token) {
+        setPhoneState(
+          "error",
+          "Could not save token",
+          "Storage unavailable in this WebView",
+        );
+        return;
+      }
+
+      try {
+        await phoneUI.showAuthenticated();
+      } catch (err: unknown) {
+        console.error("[main] Post-import setup failed:", err);
+      }
+      setPhoneState("connected", "Signed in — loading labels...");
+
+      try {
+        await controller.refreshAfterAuth();
+        setPhoneState("connected", "Connected");
+      } catch (err: unknown) {
+        console.error("[main] Post-import glasses refresh failed:", err);
+        setPhoneState("connected", "Signed in — glasses offline");
+      }
     },
     isAuthenticated: () => auth.isAuthenticated(),
     getEmail: async () => gmail.getProfile(),
