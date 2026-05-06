@@ -43,6 +43,11 @@ export class GlassAdapterImpl implements GlassAdapter {
 
     this.bridge = await this.waitForBridge();
 
+    // The host returns "invalid" (code 1) from createStartUpPageContainer
+    // when no glasses session is active. Wait for the Even App to report
+    // a Connected device before we try to render anything.
+    await this.waitForDeviceConnected();
+
     // Clear any stale page container left over from a previous launch.
     // Without this, createStartUpPageContainer can fail with code 1 (invalid)
     // because the host considers the container slot already taken.
@@ -53,6 +58,52 @@ export class GlassAdapterImpl implements GlassAdapter {
     }
 
     this.bindEvents();
+  }
+
+  /** Best-effort accessor for the underlying bridge once connect() has run. */
+  getBridge(): EvenAppBridge | null {
+    return this.bridge;
+  }
+
+  private async waitForDeviceConnected(): Promise<void> {
+    if (!this.bridge) throw new Error("Bridge not ready");
+
+    const initial = await this.bridge.getDeviceInfo().catch(() => null);
+    if (initial?.status?.isConnected()) {
+      console.log("[glass] device already connected:", initial.model, initial.sn);
+      return;
+    }
+
+    const initialState = initial?.status?.connectType ?? "none";
+    console.log("[glass] waiting for glasses to connect (initial:", initialState, ")");
+
+    return new Promise<void>((resolve, reject) => {
+      const bridge = this.bridge!;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let unsubscribe: Unsubscribe | null = null;
+
+      const cleanup = (): void => {
+        if (timer) clearTimeout(timer);
+        if (unsubscribe) unsubscribe();
+      };
+
+      timer = setTimeout(() => {
+        cleanup();
+        reject(
+          new Error(
+            "Glasses not connected. Pair your G2 glasses in the Even App and reopen G2-mail.",
+          ),
+        );
+      }, TIMING.DEVICE_CONNECT_TIMEOUT_MS);
+
+      unsubscribe = bridge.onDeviceStatusChanged((status) => {
+        console.log("[glass] device status:", status.connectType);
+        if (status.isConnected()) {
+          cleanup();
+          resolve();
+        }
+      });
+    });
   }
 
   onGesture(handler: (event: GestureEvent) => void): Unsubscribe {

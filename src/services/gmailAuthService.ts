@@ -11,6 +11,7 @@
 
 import { GMAIL_CONFIG } from "../config/gmailConfig";
 import { STORAGE_KEYS } from "../config/constants";
+import type { HostStorage } from "./hostStorage";
 
 interface TokenResponse {
   access_token: string;
@@ -22,6 +23,15 @@ interface TokenResponse {
 export class GmailAuthService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
+  private hostStorage: HostStorage | null = null;
+
+  /**
+   * Attach a host-backed storage so future writes/clears mirror to it.
+   * Safe to call multiple times; the most recent store wins.
+   */
+  setHostStorage(hostStorage: HostStorage): void {
+    this.hostStorage = hostStorage;
+  }
 
   // --- PKCE ---
 
@@ -179,8 +189,15 @@ export class GmailAuthService {
     });
 
     if (!response.ok) {
-      // Refresh token revoked or expired — clear it
+      // Refresh token revoked or expired — clear it from both stores
       localStorage.removeItem(STORAGE_KEYS.refreshToken);
+      if (this.hostStorage) {
+        await this.hostStorage
+          .remove(STORAGE_KEYS.refreshToken)
+          .catch((err: unknown) =>
+            console.error("[gmail-auth] failed to clear host token:", err),
+          );
+      }
       throw new Error("Session expired. Please sign in again.");
     }
 
@@ -220,20 +237,44 @@ export class GmailAuthService {
 
   /**
    * Import a refresh token obtained via the browser-relay flow.
+   *
+   * Writes to localStorage immediately for synchronous reads, and (when
+   * a host store is available) mirrors to the Even App's persistent
+   * storage so the token survives a full app restart.
    */
-  importRefreshToken(token: string): void {
+  async importRefreshToken(token: string): Promise<void> {
     localStorage.setItem(STORAGE_KEYS.refreshToken, token);
+    if (this.hostStorage) {
+      await this.hostStorage.set(STORAGE_KEYS.refreshToken, token);
+    }
   }
 
   /**
-   * Sign out: clear all tokens.
+   * Copy a previously stored refresh token from host storage into
+   * localStorage when localStorage is empty (e.g. after the WebView
+   * dropped its session storage between Even App launches).
    */
-  signOut(): void {
+  async hydrateFromHostStorage(): Promise<void> {
+    if (!this.hostStorage) return;
+    if (localStorage.getItem(STORAGE_KEYS.refreshToken)) return;
+    const fromHost = await this.hostStorage.get(STORAGE_KEYS.refreshToken);
+    if (fromHost) {
+      localStorage.setItem(STORAGE_KEYS.refreshToken, fromHost);
+    }
+  }
+
+  /**
+   * Sign out: clear all tokens (browser + host storage).
+   */
+  async signOut(): Promise<void> {
     this.accessToken = null;
     this.tokenExpiresAt = 0;
     localStorage.removeItem(STORAGE_KEYS.refreshToken);
     localStorage.removeItem(STORAGE_KEYS.codeVerifier);
     localStorage.removeItem(STORAGE_KEYS.preAuthState);
+    if (this.hostStorage) {
+      await this.hostStorage.remove(STORAGE_KEYS.refreshToken);
+    }
   }
 
   // --- Helpers ---

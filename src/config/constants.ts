@@ -24,6 +24,8 @@ export const TIMING = {
   SCROLL_COOLDOWN_MS: 300,
   /** Timeout waiting for EvenAppBridge connection (ms). */
   BRIDGE_TIMEOUT_MS: 15_000,
+  /** Timeout waiting for the glasses to report Connected after the bridge is ready. */
+  DEVICE_CONNECT_TIMEOUT_MS: 60_000,
 } as const;
 
 export const CONTAINER_IDS = {

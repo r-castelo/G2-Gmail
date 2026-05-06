@@ -3,6 +3,7 @@ import { Controller } from "./app/controller";
 import { GlassAdapterImpl } from "./adapters/glassAdapter";
 import { GmailAdapterImpl } from "./adapters/gmailAdapter";
 import { GmailAuthService } from "./services/gmailAuthService";
+import { BridgeHostStorage } from "./services/hostStorage";
 import { WakeLockServiceImpl } from "./services/wakeLockService";
 import { PhoneUI, setPhoneState } from "./phone/phoneUI";
 import { GMAIL_CONFIG } from "./config/gmailConfig";
@@ -73,7 +74,7 @@ async function bootstrap(): Promise<void> {
       phoneUI.showTokenPasteScreen(relayUrl);
     },
     onSignOut: async () => {
-      auth.signOut();
+      await auth.signOut();
       try {
         await phoneUI.showAuthenticated();
       } catch {
@@ -82,7 +83,7 @@ async function bootstrap(): Promise<void> {
       setPhoneState("connected", "Signed out");
     },
     onImportToken: async (token: string) => {
-      auth.importRefreshToken(token);
+      await auth.importRefreshToken(token);
 
       // Verify the WebView actually persisted the token. Some hosts return a
       // working localStorage object whose values evaporate on the next read,
@@ -134,7 +135,32 @@ async function bootstrap(): Promise<void> {
   // Connect glasses in background — don't block the phone UI
   controller.start()
     .then(async () => {
+      // Bridge is now ready. Wire host-backed storage and recover any
+      // refresh token from a previous Even App session that the WebView's
+      // localStorage may have dropped.
+      const bridge = glass.getBridge();
+      let hydrated = false;
+      if (bridge) {
+        auth.setHostStorage(new BridgeHostStorage(bridge));
+        try {
+          const wasAuthed = auth.isAuthenticated();
+          await auth.hydrateFromHostStorage();
+          hydrated = !wasAuthed && auth.isAuthenticated();
+        } catch (err: unknown) {
+          console.error("[main] Host-storage hydrate failed:", err);
+        }
+      }
+
       setPhoneState("connected", "Connected");
+
+      if (hydrated) {
+        try {
+          await phoneUI.showAuthenticated();
+        } catch (err: unknown) {
+          console.error("[main] showAuthenticated after hydrate failed:", err);
+        }
+      }
+
       if (auth.isAuthenticated()) {
         try {
           await controller.refreshAfterAuth();
