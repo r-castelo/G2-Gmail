@@ -21,8 +21,8 @@ import "./phoneUI.css";
 export interface PhoneUIOptions {
   onSignIn: () => Promise<void>;
   onSignInRelay: () => void;
-  onSignOut: () => void;
-  onImportToken: (token: string) => void;
+  onSignOut: () => void | Promise<void>;
+  onImportToken: (token: string) => void | Promise<void>;
   isAuthenticated: () => boolean;
   getEmail: () => Promise<string>;
 }
@@ -85,8 +85,8 @@ interface PhoneUISnapshot {
 export class PhoneUI {
   private readonly onSignIn: () => Promise<void>;
   private readonly onSignInRelay: () => void;
-  private readonly onSignOut: () => void;
-  private readonly onImportTokenFn: (token: string) => void;
+  private readonly onSignOut: () => void | Promise<void>;
+  private readonly onImportTokenFn: (token: string) => void | Promise<void>;
   private readonly isAuthenticatedFn: () => boolean;
   private readonly getEmailFn: () => Promise<string>;
 
@@ -171,14 +171,14 @@ export class PhoneUI {
   }
 
   handleSignOut(): void {
-    this.onSignOut();
+    void this.onSignOut();
     this.email = "";
     this.viewMode = "normal";
     this.emit();
   }
 
   handleImportToken(token: string): void {
-    this.onImportTokenFn(token);
+    void this.onImportTokenFn(token);
     this.viewMode = "normal";
     this.emit();
   }
