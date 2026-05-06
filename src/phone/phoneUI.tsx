@@ -303,10 +303,17 @@ function AuthenticatedView({
         </CardContent>
 
         <CardFooter>
-          <Chip size="sm" className="er-status-chip">
-            <StatusDot state={snapshot.status.state} />
-            {snapshot.status.text}
-          </Chip>
+          <div className="er-status-stack">
+            <Chip size="sm" className="er-status-chip">
+              <StatusDot state={snapshot.status.state} />
+              {snapshot.status.text}
+            </Chip>
+            {snapshot.status.detail && (
+              <Text as="p" variant="subtitle" className="er-status-detail">
+                {snapshot.status.detail}
+              </Text>
+            )}
+          </div>
         </CardFooter>
       </Card>
     </div>

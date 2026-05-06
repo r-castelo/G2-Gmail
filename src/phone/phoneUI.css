@@ -37,6 +37,22 @@ body {
   gap: var(--space-8);
 }
 
+.er-status-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: 100%;
+}
+
+.er-status-detail {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--color-tc-2, var(--color-tc-1));
+  word-break: break-word;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
 .er-status-dot-connecting {
   color: var(--color-bc-accent-pressed);
 }

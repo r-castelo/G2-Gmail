@@ -2,7 +2,7 @@
   "package_id": "com.renato.g2gmail",
   "edition": "202601",
   "name": "G2-mail",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "min_app_version": "2.0.0",
   "min_sdk_version": "0.0.7",
   "tagline": "Read Gmail on G2 glasses",
@@ -14,10 +14,10 @@
       "name": "network",
       "desc": "Sign in to Gmail and fetch labels, message lists, and email bodies for display on the glasses.",
       "whitelist": [
-        "evenhub.evenrealities.com",
-        "accounts.google.com",
-        "oauth2.googleapis.com",
-        "gmail.googleapis.com"
+        "https://evenhub.evenrealities.com",
+        "https://accounts.google.com",
+        "https://oauth2.googleapis.com",
+        "https://gmail.googleapis.com"
       ]
     }
   ],

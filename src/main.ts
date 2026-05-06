@@ -108,7 +108,11 @@ async function bootstrap(): Promise<void> {
         setPhoneState("connected", "Connected");
       } catch (err: unknown) {
         console.error("[main] Post-import glasses refresh failed:", err);
-        setPhoneState("connected", "Signed in — glasses offline");
+        setPhoneState(
+          "connected",
+          "Signed in — glasses offline",
+          String(err).slice(0, 300),
+        );
       }
     },
     isAuthenticated: () => auth.isAuthenticated(),
@@ -136,6 +140,11 @@ async function bootstrap(): Promise<void> {
           await controller.refreshAfterAuth();
         } catch (err: unknown) {
           console.error("[main] Post-auth glasses refresh failed:", err);
+          setPhoneState(
+            "connected",
+            "Signed in — glasses offline",
+            String(err).slice(0, 300),
+          );
         }
       }
     })
@@ -144,6 +153,7 @@ async function bootstrap(): Promise<void> {
       setPhoneState(
         auth.isAuthenticated() ? "connected" : "error",
         auth.isAuthenticated() ? "Signed in — glasses offline" : "Glasses not connected",
+        String(err).slice(0, 300),
       );
     });
 }
