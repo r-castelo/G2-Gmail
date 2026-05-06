@@ -42,6 +42,16 @@ export class GlassAdapterImpl implements GlassAdapter {
     if (this.bridge) return;
 
     this.bridge = await this.waitForBridge();
+
+    // Clear any stale page container left over from a previous launch.
+    // Without this, createStartUpPageContainer can fail with code 1 (invalid)
+    // because the host considers the container slot already taken.
+    try {
+      await this.bridge.shutDownPageContainer(0);
+    } catch (err: unknown) {
+      console.log("[glass] pre-startup shutDown skipped:", err);
+    }
+
     this.bindEvents();
   }
 
