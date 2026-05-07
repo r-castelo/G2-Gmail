@@ -15,7 +15,7 @@
     "pack": "npm run build && npx evenhub pack app.json ./dist --output g2-gmail.ehpk"
   },
   "dependencies": {
-    "@evenrealities/even_hub_sdk": "^0.0.10",
+    "@evenrealities/even_hub_sdk": "0.0.7",
     "@evenrealities/evenhub-cli": "^0.1.13",
     "@evenrealities/evenhub-simulator": "^0.7.3",
     "@jappyjan/even-realities-ui": "^0.0.11",
