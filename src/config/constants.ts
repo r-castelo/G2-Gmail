@@ -13,8 +13,14 @@ export const GLASS_LAYOUT = {
 } as const;
 
 export const TEXT_LAYOUT = {
-  /** Characters per display line. ~64 chars fills a 560px container at SDK default font. */
-  CHARS_PER_LINE: 64,
+  /**
+   * Characters per display line. The firmware uses a proportional font, so
+   * 64 chars overflowed for lines containing wider glyphs (uppercase,
+   * punctuation) and the firmware silently re-wrapped them into a second
+   * row, breaking our layout. 48 leaves enough margin for worst-case
+   * widths at the 560px container width.
+   */
+  CHARS_PER_LINE: 48,
   /** Lines per page. Aim for ~320-400 chars per page for comfortable reading. */
   LINES_PER_PAGE: 8,
 } as const;

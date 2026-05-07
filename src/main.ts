@@ -83,6 +83,21 @@ async function bootstrap(): Promise<void> {
       setPhoneState("connected", "Signed out");
     },
     onImportToken: async (token: string) => {
+      // Make sure host storage is wired up BEFORE writing the token; otherwise
+      // a fast-paste user races the bridge connection and the token only
+      // lands in localStorage (which the WebView wipes between Even App
+      // sessions). Awaiting the start promise here is idempotent — if it's
+      // already resolved we proceed immediately.
+      try {
+        await startPromise;
+      } catch {
+        // bridge unavailable — fall through and write what we can
+      }
+      const bridge = glass.getBridge();
+      if (bridge) {
+        auth.setHostStorage(new BridgeHostStorage(bridge));
+      }
+
       await auth.importRefreshToken(token);
 
       // Verify the WebView actually persisted the token. Some hosts return a
@@ -95,6 +110,27 @@ async function bootstrap(): Promise<void> {
           "Storage unavailable in this WebView",
         );
         return;
+      }
+
+      // Confirm the token reached host storage too — otherwise the next
+      // Even App restart will lose it and force the user to relay-auth again.
+      if (bridge) {
+        const stored = await new BridgeHostStorage(bridge)
+          .get(STORAGE_KEYS.refreshToken)
+          .catch(() => null);
+        if (stored !== token) {
+          setPhoneState(
+            "connected",
+            "Signed in — host storage unavailable",
+            "Token will be lost when Even App restarts.",
+          );
+        }
+      } else {
+        setPhoneState(
+          "connected",
+          "Signed in — bridge unavailable",
+          "Token will be lost when Even App restarts.",
+        );
       }
 
       try {
@@ -132,8 +168,11 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  // Connect glasses in background — don't block the phone UI
-  controller.start()
+  // Connect glasses in background — don't block the phone UI. We capture the
+  // promise so onImportToken can await it and avoid a race where the token
+  // is written before host storage is wired up.
+  const startPromise = controller.start();
+  startPromise
     .then(async () => {
       // Bridge is now ready. Wire host-backed storage and recover any
       // refresh token from a previous Even App session that the WebView's

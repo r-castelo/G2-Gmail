@@ -13,6 +13,7 @@ import {
   CONTAINER_IDS,
   CONTAINER_NAMES,
   GLASS_LAYOUT,
+  TEXT_LAYOUT,
   TIMING,
 } from "../config/constants";
 import type { GestureEvent, GlassAdapter, StatusBar, Unsubscribe } from "../types/contracts";
@@ -353,10 +354,11 @@ export class GlassAdapterImpl implements GlassAdapter {
    * - Left container: subject line, positioned at left edge
    * - Right container: page info, positioned so text ends at right edge
    *
-   * Uses ~8.75px per character (560px / 64 chars) to calculate width.
+   * Width-per-char derived from TEXT_LAYOUT.CHARS_PER_LINE so it stays in
+   * sync with the wrapping width used to paginate the body text.
    */
   private makeSplitStatus(status: StatusBar): [TextContainerProperty, TextContainerProperty] {
-    const charWidth = GLASS_LAYOUT.width / 64;
+    const charWidth = GLASS_LAYOUT.width / TEXT_LAYOUT.CHARS_PER_LINE;
     const rightWidth = Math.ceil(status.right.length * charWidth) + 16; // +padding
     const rightX = GLASS_LAYOUT.x + GLASS_LAYOUT.width - rightWidth;
     const leftWidth = rightX - GLASS_LAYOUT.x;
