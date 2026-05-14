@@ -1,4 +1,5 @@
 import "@jappyjan/even-realities-ui/styles.css";
+import { waitForEvenAppBridge } from "@evenrealities/even_hub_sdk";
 import { Controller } from "./app/controller";
 import { GlassAdapterImpl } from "./adapters/glassAdapter";
 import { GmailAdapterImpl } from "./adapters/gmailAdapter";
@@ -10,6 +11,15 @@ import { GMAIL_CONFIG } from "./config/gmailConfig";
 import { STORAGE_KEYS } from "./config/constants";
 
 const RELAY_AUTH_KEY = "g2_gmail.relay_auth";
+
+// Wait for the Even App bridge with a hard ceiling so browser/sim dev
+// (where the bridge never appears) doesn't hang the launch UI.
+async function waitForBridgeWithTimeout(ms: number) {
+  return Promise.race([
+    waitForEvenAppBridge(),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
 
 async function bootstrap(): Promise<void> {
   setPhoneState("connecting", "Starting...");
@@ -56,6 +66,24 @@ async function bootstrap(): Promise<void> {
       phoneUI.showRelayTokenScreen(refreshToken);
     }
     return; // Don't start glasses controller — this is the system browser
+  }
+
+  // --- Hydrate auth state from host storage BEFORE anything reads it ---
+  //
+  // The Even App WebView wipes browser localStorage between sessions, so
+  // a previously-saved refresh token only lives in the host store. We
+  // have to copy it back into localStorage before constructing the phone
+  // UI or starting the glasses controller — otherwise both make their
+  // auth decision against an empty localStorage and the user sees "Sign
+  // in from phone" even though the token is sitting right there.
+  const earlyBridge = await waitForBridgeWithTimeout(4000);
+  if (earlyBridge) {
+    auth.setHostStorage(new BridgeHostStorage(earlyBridge));
+    try {
+      await auth.hydrateFromHostStorage();
+    } catch (err: unknown) {
+      console.error("[main] early hydrate failed:", err);
+    }
   }
 
   const glass = new GlassAdapterImpl();
@@ -156,49 +184,26 @@ async function bootstrap(): Promise<void> {
     getEmail: async () => gmail.getProfile(),
   });
 
-  // If authenticated, show authenticated state on phone
+  // If we launched already authenticated (host-storage hydrate or a
+  // just-completed OAuth redirect), kick off the email-address fetch so
+  // the phone UI shows the actual address instead of a bare "Signed in"
+  // label. Fire-and-forget — the constructor snapshot already has the
+  // correct auth flag, and a failed profile fetch shouldn't block boot.
   if (wasOAuthRedirect || auth.isAuthenticated()) {
-    try {
-      await phoneUI.showAuthenticated();
-      setPhoneState("connected", "Signed in — connecting glasses...");
-    } catch (err: unknown) {
-      console.error("[main] Post-auth setup failed:", err);
-      setPhoneState("error", `Failed to load Gmail: ${String(err)}`);
-      return;
-    }
+    void phoneUI.showAuthenticated().catch((err: unknown) => {
+      console.error("[main] showAuthenticated on launch failed:", err);
+    });
   }
 
-  // Connect glasses in background — don't block the phone UI. We capture the
-  // promise so onImportToken can await it and avoid a race where the token
-  // is written before host storage is wired up.
+  // Connect glasses in background — don't block the phone UI. We capture
+  // the promise so onImportToken can await it and avoid a race where the
+  // token is written before host storage is wired up. Hydration already
+  // ran above, so this .then only needs to refresh after sign-ins that
+  // happen mid-session (relay paste, etc.).
   const startPromise = controller.start();
   startPromise
     .then(async () => {
-      // Bridge is now ready. Wire host-backed storage and recover any
-      // refresh token from a previous Even App session that the WebView's
-      // localStorage may have dropped.
-      const bridge = glass.getBridge();
-      let hydrated = false;
-      if (bridge) {
-        auth.setHostStorage(new BridgeHostStorage(bridge));
-        try {
-          const wasAuthed = auth.isAuthenticated();
-          await auth.hydrateFromHostStorage();
-          hydrated = !wasAuthed && auth.isAuthenticated();
-        } catch (err: unknown) {
-          console.error("[main] Host-storage hydrate failed:", err);
-        }
-      }
-
       setPhoneState("connected", "Connected");
-
-      if (hydrated) {
-        try {
-          await phoneUI.showAuthenticated();
-        } catch (err: unknown) {
-          console.error("[main] showAuthenticated after hydrate failed:", err);
-        }
-      }
 
       if (auth.isAuthenticated()) {
         try {
