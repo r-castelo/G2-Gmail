@@ -68,22 +68,22 @@ async function bootstrap(): Promise<void> {
     return; // Don't start glasses controller — this is the system browser
   }
 
-  // --- Hydrate auth state from host storage BEFORE anything reads it ---
-  //
-  // The Even App WebView wipes browser localStorage between sessions, so
-  // a previously-saved refresh token only lives in the host store. We
-  // have to copy it back into localStorage before constructing the phone
-  // UI or starting the glasses controller — otherwise both make their
-  // auth decision against an empty localStorage and the user sees "Sign
-  // in from phone" even though the token is sitting right there.
+  // --- Hydrate auth state from any persistent backend BEFORE anything
+  //     reads it. The Even App WebView wipes browser localStorage between
+  //     sessions, and bridge.setLocalStorage hasn't been reliable either —
+  //     so we cast a wide net (host, IndexedDB, cookie) and use whichever
+  //     one survived. Both the phone UI and the glasses controller must
+  //     see the right auth state on their first read, otherwise the user
+  //     gets "Sign in from phone" even with a saved token.
   const earlyBridge = await waitForBridgeWithTimeout(4000);
   if (earlyBridge) {
     auth.setHostStorage(new BridgeHostStorage(earlyBridge));
-    try {
-      await auth.hydrateFromHostStorage();
-    } catch (err: unknown) {
-      console.error("[main] early hydrate failed:", err);
-    }
+  }
+  let hydrateResult: { source: string | null } = { source: null };
+  try {
+    hydrateResult = await auth.hydrateFromHostStorage();
+  } catch (err: unknown) {
+    console.error("[main] early hydrate failed:", err);
   }
 
   const glass = new GlassAdapterImpl();
@@ -111,11 +111,11 @@ async function bootstrap(): Promise<void> {
       setPhoneState("connected", "Signed out");
     },
     onImportToken: async (token: string) => {
-      // Make sure host storage is wired up BEFORE writing the token; otherwise
-      // a fast-paste user races the bridge connection and the token only
-      // lands in localStorage (which the WebView wipes between Even App
-      // sessions). Awaiting the start promise here is idempotent — if it's
-      // already resolved we proceed immediately.
+      // Make sure host storage is wired up BEFORE writing, otherwise a
+      // fast-paste user races the bridge connection and the host backend
+      // gets skipped from the fan-out. The other backends (IndexedDB,
+      // cookie) don't need the bridge, so even a missing bridge isn't
+      // fatal — but we still want host in the mix when it's available.
       try {
         await startPromise;
       } catch {
@@ -128,36 +128,36 @@ async function bootstrap(): Promise<void> {
 
       await auth.importRefreshToken(token);
 
-      // Verify the WebView actually persisted the token. Some hosts return a
-      // working localStorage object whose values evaporate on the next read,
-      // which is what causes the relay-auth loop the user reported.
+      // Verify *something* durable accepted the write. If every durable
+      // backend failed (no bridge, no IndexedDB, no cookies), the token
+      // will not survive the next Even App restart — tell the user.
+      const writeResult = auth.getLastWriteResult();
+      const durableHits = writeResult
+        ? Object.entries(writeResult.backends)
+            .filter(([name, ok]) => ok && name !== "localStorage")
+            .map(([name]) => name)
+        : [];
+
       if (localStorage.getItem(STORAGE_KEYS.refreshToken) !== token) {
         setPhoneState(
           "error",
           "Could not save token",
-          "Storage unavailable in this WebView",
+          "All storage backends rejected the write.",
         );
         return;
       }
 
-      // Confirm the token reached host storage too — otherwise the next
-      // Even App restart will lose it and force the user to relay-auth again.
-      if (bridge) {
-        const stored = await new BridgeHostStorage(bridge)
-          .get(STORAGE_KEYS.refreshToken)
-          .catch(() => null);
-        if (stored !== token) {
-          setPhoneState(
-            "connected",
-            "Signed in — host storage unavailable",
-            "Token will be lost when Even App restarts.",
-          );
-        }
+      if (durableHits.length === 0) {
+        setPhoneState(
+          "connected",
+          "Signed in — storage not durable",
+          "No persistent backend accepted the token. It will be lost on restart.",
+        );
       } else {
         setPhoneState(
           "connected",
-          "Signed in — bridge unavailable",
-          "Token will be lost when Even App restarts.",
+          "Signed in",
+          `Token saved to: ${durableHits.join(", ")}`,
         );
       }
 
@@ -166,11 +166,9 @@ async function bootstrap(): Promise<void> {
       } catch (err: unknown) {
         console.error("[main] Post-import setup failed:", err);
       }
-      setPhoneState("connected", "Signed in — loading labels...");
 
       try {
         await controller.refreshAfterAuth();
-        setPhoneState("connected", "Connected");
       } catch (err: unknown) {
         console.error("[main] Post-import glasses refresh failed:", err);
         setPhoneState(
@@ -184,15 +182,26 @@ async function bootstrap(): Promise<void> {
     getEmail: async () => gmail.getProfile(),
   });
 
-  // If we launched already authenticated (host-storage hydrate or a
-  // just-completed OAuth redirect), kick off the email-address fetch so
-  // the phone UI shows the actual address instead of a bare "Signed in"
-  // label. Fire-and-forget — the constructor snapshot already has the
-  // correct auth flag, and a failed profile fetch shouldn't block boot.
+  // If we launched already authenticated (any persistent backend hit on
+  // hydrate or a just-completed OAuth redirect), kick off the email
+  // fetch so the phone UI shows the actual address. Fire-and-forget —
+  // the constructor snapshot already has the correct auth flag.
   if (wasOAuthRedirect || auth.isAuthenticated()) {
     void phoneUI.showAuthenticated().catch((err: unknown) => {
       console.error("[main] showAuthenticated on launch failed:", err);
     });
+    if (hydrateResult.source && hydrateResult.source !== "localStorage") {
+      // Visible proof that persistence worked — and from which backend.
+      setPhoneState(
+        "connected",
+        "Signed in",
+        `Token recovered from: ${hydrateResult.source}`,
+      );
+    }
+  } else if (auth.getBackendNames().length > 0) {
+    // Not signed in. Note which backends we'd try if the user pastes a
+    // token, in case the host one is missing (bridge timed out).
+    console.log("[main] persistent backends available:", auth.getBackendNames());
   }
 
   // Connect glasses in background — don't block the phone UI. We capture

@@ -4,7 +4,9 @@
  * Design:
  * - No popups — uses full-page redirect to Google's consent screen
  * - PKCE (S256) for public client security (no client secret in browser)
- * - Refresh token persisted in localStorage for cross-session auth
+ * - Refresh token persisted to a multi-backend store (localStorage,
+ *   host storage, IndexedDB, cookie) so the token survives whichever
+ *   storage area the Even App WebView clears between sessions
  * - Access token kept in memory only (short-lived, ~1 hour)
  * - Uses the gmail.readonly scope
  */
@@ -12,6 +14,11 @@
 import { GMAIL_CONFIG } from "../config/gmailConfig";
 import { STORAGE_KEYS } from "../config/constants";
 import type { HostStorage } from "./hostStorage";
+import {
+  PersistentStorage,
+  type PersistReadResult,
+  type PersistWriteResult,
+} from "./persistentStorage";
 
 interface TokenResponse {
   access_token: string;
@@ -23,14 +30,31 @@ interface TokenResponse {
 export class GmailAuthService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
-  private hostStorage: HostStorage | null = null;
+  private persistence: PersistentStorage = new PersistentStorage(null);
+  private lastWriteResult: PersistWriteResult | null = null;
+  private lastReadResult: PersistReadResult | null = null;
 
   /**
    * Attach a host-backed storage so future writes/clears mirror to it.
    * Safe to call multiple times; the most recent store wins.
    */
   setHostStorage(hostStorage: HostStorage): void {
-    this.hostStorage = hostStorage;
+    this.persistence.setHostStorage(hostStorage);
+  }
+
+  /** Diagnostic: which backends accepted the last token write. */
+  getLastWriteResult(): PersistWriteResult | null {
+    return this.lastWriteResult;
+  }
+
+  /** Diagnostic: which backend the token was recovered from on hydrate. */
+  getLastReadResult(): PersistReadResult | null {
+    return this.lastReadResult;
+  }
+
+  /** Diagnostic: every backend name currently registered. */
+  getBackendNames(): string[] {
+    return this.persistence.backendNames();
   }
 
   // --- PKCE ---
@@ -164,7 +188,10 @@ export class GmailAuthService {
     this.tokenExpiresAt = Date.now() + data.expires_in * 1000 - 60_000;
 
     if (data.refresh_token) {
-      localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
+      this.lastWriteResult = await this.persistence.writeAll(
+        STORAGE_KEYS.refreshToken,
+        data.refresh_token,
+      );
     }
   }
 
@@ -189,15 +216,9 @@ export class GmailAuthService {
     });
 
     if (!response.ok) {
-      // Refresh token revoked or expired — clear it from both stores
-      localStorage.removeItem(STORAGE_KEYS.refreshToken);
-      if (this.hostStorage) {
-        await this.hostStorage
-          .remove(STORAGE_KEYS.refreshToken)
-          .catch((err: unknown) =>
-            console.error("[gmail-auth] failed to clear host token:", err),
-          );
-      }
+      // Refresh token revoked or expired — wipe it from every backend so
+      // the user gets a clean relay-auth on the next launch.
+      await this.persistence.clearAll(STORAGE_KEYS.refreshToken);
       throw new Error("Session expired. Please sign in again.");
     }
 
@@ -236,45 +257,46 @@ export class GmailAuthService {
   }
 
   /**
-   * Import a refresh token obtained via the browser-relay flow.
-   *
-   * Writes to localStorage immediately for synchronous reads, and (when
-   * a host store is available) mirrors to the Even App's persistent
-   * storage so the token survives a full app restart.
+   * Import a refresh token obtained via the browser-relay flow. Writes
+   * to every backend in parallel; we don't know which one will survive
+   * the next Even App restart, so we cast a wide net.
    */
   async importRefreshToken(token: string): Promise<void> {
-    localStorage.setItem(STORAGE_KEYS.refreshToken, token);
-    if (this.hostStorage) {
-      await this.hostStorage.set(STORAGE_KEYS.refreshToken, token);
-    }
+    this.lastWriteResult = await this.persistence.writeAll(
+      STORAGE_KEYS.refreshToken,
+      token,
+    );
   }
 
   /**
-   * Copy a previously stored refresh token from host storage into
-   * localStorage when localStorage is empty (e.g. after the WebView
-   * dropped its session storage between Even App launches).
+   * Recover a previously stored refresh token from whichever backend
+   * still has it (host storage, IndexedDB, cookie) and copy it back
+   * into localStorage so the rest of the app can use the fast sync
+   * accessors. Idempotent — does nothing if localStorage already has
+   * the token.
    */
-  async hydrateFromHostStorage(): Promise<void> {
-    if (!this.hostStorage) return;
-    if (localStorage.getItem(STORAGE_KEYS.refreshToken)) return;
-    const fromHost = await this.hostStorage.get(STORAGE_KEYS.refreshToken);
-    if (fromHost) {
-      localStorage.setItem(STORAGE_KEYS.refreshToken, fromHost);
+  async hydrateFromHostStorage(): Promise<PersistReadResult> {
+    if (localStorage.getItem(STORAGE_KEYS.refreshToken)) {
+      this.lastReadResult = { value: "<cached>", source: "localStorage" };
+      return this.lastReadResult;
     }
+    const result = await this.persistence.readFirst(STORAGE_KEYS.refreshToken);
+    this.lastReadResult = result;
+    return result;
   }
 
   /**
-   * Sign out: clear all tokens (browser + host storage).
+   * Sign out: clear the refresh token from every backend so the user
+   * cannot be re-hydrated from a forgotten store on next launch.
    */
   async signOut(): Promise<void> {
     this.accessToken = null;
     this.tokenExpiresAt = 0;
-    localStorage.removeItem(STORAGE_KEYS.refreshToken);
     localStorage.removeItem(STORAGE_KEYS.codeVerifier);
     localStorage.removeItem(STORAGE_KEYS.preAuthState);
-    if (this.hostStorage) {
-      await this.hostStorage.remove(STORAGE_KEYS.refreshToken);
-    }
+    await this.persistence.clearAll(STORAGE_KEYS.refreshToken);
+    this.lastReadResult = null;
+    this.lastWriteResult = null;
   }
 
   // --- Helpers ---
